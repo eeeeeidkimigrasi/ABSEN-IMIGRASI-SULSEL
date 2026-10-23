@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
     lat?: number;
     lng?: number;
     akurasi_gps?: number;
+    konfirmasi_baru?: boolean;
   };
 
   try {
@@ -80,6 +81,34 @@ export async function POST(req: NextRequest) {
 
   const tanggal = getTodayDate();
   const hari = getDayName(tanggal);
+
+  const existingToday = await supabase
+    .from('absensi')
+    .select('jam_keluar', { count: 'exact', head: true })
+    .eq('nama_key', nama.toLowerCase().trim())
+    .eq('univ_key', universitas.toLowerCase().trim())
+    .eq('tanggal', tanggal);
+
+  if (existingToday.count && existingToday.count > 0) {
+    const row = await supabase
+      .from('absensi')
+      .select('jam_keluar')
+      .eq('nama_key', nama.toLowerCase().trim())
+      .eq('univ_key', universitas.toLowerCase().trim())
+      .eq('tanggal', tanggal)
+      .single();
+    return NextResponse.json({ status: 'sudah_absen', jam_keluar: row.data?.jam_keluar || '' });
+  }
+
+  const existing = await supabase
+    .from('absensi')
+    .select('nama_key', { count: 'exact', head: true })
+    .eq('nama_key', nama.toLowerCase().trim())
+    .eq('univ_key', universitas.toLowerCase().trim());
+
+  if (existing.count === 0 && !body.konfirmasi_baru) {
+    return NextResponse.json({ status: 'nama_baru' });
+  }
 
   const { error: dbError } = await supabase
     .from('absensi')
