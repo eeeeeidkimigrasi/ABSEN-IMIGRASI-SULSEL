@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { appendAbsen } from '@/lib/sheets';
 import { jarakMeter } from '@/lib/geo';
-import { getTodayDate } from '@/lib/waktu';
+import { getTodayDate, getDayName } from '@/lib/waktu';
 
 const OFFICE_LAT = Number(process.env.OFFICE_LAT);
 const OFFICE_LNG = Number(process.env.OFFICE_LNG);
@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
   }
 
   const tanggal = getTodayDate();
+  const hari = getDayName(tanggal);
 
   const { error: dbError } = await supabase
     .from('absensi')
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await appendAbsen({ nama, universitas, tanggal, jam_masuk, jam_keluar });
+    await appendAbsen({ nama, universitas, tanggal, hari, jam_masuk, jam_keluar });
     await supabase
       .from('absensi')
       .update({ synced_to_sheets: true })
