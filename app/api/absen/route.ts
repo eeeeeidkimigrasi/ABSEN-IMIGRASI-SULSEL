@@ -48,8 +48,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Body JSON tidak valid.' }, { status: 400 });
   }
 
-  const nama = body.nama?.trim();
-  const universitas = body.universitas?.trim();
+  function rapikan(teks: string): string {
+    return teks.trim().replace(/\s+/g, ' ');
+  }
+
+  const nama = rapikan(body.nama || '');
+  const universitas = rapikan(body.universitas || '');
   const jam_masuk = body.jam_masuk?.trim();
   const jam_keluar = body.jam_keluar?.trim();
   const lat = body.lat;
