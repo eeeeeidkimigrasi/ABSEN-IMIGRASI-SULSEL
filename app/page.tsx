@@ -8,6 +8,7 @@ type FormData = {
   universitas: string;
   jam_masuk: string;
   jam_keluar: string;
+  keterangan: string;
 };
 
 export default function AbsenPage() {
@@ -17,6 +18,7 @@ export default function AbsenPage() {
     universitas: '',
     jam_masuk: '',
     jam_keluar: '',
+    keterangan: '',
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -93,6 +95,7 @@ export default function AbsenPage() {
       try {
         localStorage.setItem('absen_last', JSON.stringify({ nama: form.nama, universitas: form.universitas }));
       } catch {}
+      setForm(f => ({ ...f, keterangan: '' }));
       router.push(`/sukses?nama=${data.nama}&tanggal=${data.tanggal}&jam_masuk=${data.jam_masuk}&jam_keluar=${data.jam_keluar}`);
     } catch {
       setLoading(false);
@@ -143,6 +146,10 @@ export default function AbsenPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Jam Keluar</label>
             <input name="jam_keluar" type="time" required value={form.jam_keluar} onChange={handleChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base" disabled={loading} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Keterangan</label>
+            <input name="keterangan" type="text" maxLength={100} value={form.keterangan} onChange={handleChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base" placeholder="Opsional" disabled={loading} />
           </div>
           <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white font-medium rounded-lg text-base disabled:opacity-50">
             {loading ? 'Mengirim...' : 'Kirim'}

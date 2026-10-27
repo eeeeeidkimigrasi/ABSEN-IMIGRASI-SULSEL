@@ -16,9 +16,9 @@ const auth = new google.auth.JWT({
 
 const sheets = google.sheets({ version: 'v4', auth });
 
-const HEADER = ['NAMA', 'UNIVERSITAS', 'TANGGAL', 'HARI', 'JAM MASUK', 'JAM KELUAR'];
+const HEADER = ['NAMA', 'UNIVERSITAS', 'TANGGAL', 'HARI', 'JAM MASUK', 'JAM KELUAR', 'KETERANGAN'];
 
-const COLUMN_WIDTHS = [220, 240, 110, 110, 130, 130];
+const COLUMN_WIDTHS = [220, 240, 110, 110, 130, 130, 220];
 
 async function ensureSheetExists(sheetName: string): Promise<number> {
   const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -63,7 +63,7 @@ async function formatNewSheet(sheetId: number): Promise<void> {
         startRowIndex: 0,
         endRowIndex: 1,
         startColumnIndex: 0,
-        endColumnIndex: 6,
+        endColumnIndex: 7,
       },
       cell: {
         userEnteredFormat: {
@@ -104,7 +104,7 @@ async function formatNewSheet(sheetId: number): Promise<void> {
         sheetId,
         startRowIndex: 1,
         startColumnIndex: 2,
-        endColumnIndex: 6,
+        endColumnIndex: 7,
       },
       cell: {
         userEnteredFormat: {
@@ -128,7 +128,7 @@ async function formatNewSheet(sheetId: number): Promise<void> {
         sheetId,
         startRowIndex: 1,
         startColumnIndex: 0,
-        endColumnIndex: 6,
+        endColumnIndex: 7,
       },
       cell: {
         userEnteredFormat: {
@@ -152,7 +152,7 @@ async function formatNewSheet(sheetId: number): Promise<void> {
           sheetId,
           startRowIndex: 0,
           startColumnIndex: 0,
-          endColumnIndex: 6,
+          endColumnIndex: 7,
         },
       },
     },
@@ -169,13 +169,13 @@ async function formatNewSheet(sheetId: number): Promise<void> {
 async function ensureHeader(sheetName: string, sheetId: number): Promise<void> {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${sheetName}!A1:F1`,
+    range: `${sheetName}!A1:G1`,
   });
   const values = res.data.values;
   if (!values || values.length === 0) {
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `${sheetName}!A1:F1`,
+      range: `${sheetName}!A1:G1`,
       valueInputOption: 'RAW',
       requestBody: { values: [HEADER] },
     });
@@ -184,7 +184,7 @@ async function ensureHeader(sheetName: string, sheetId: number): Promise<void> {
 
 /**
  * Menambahkan satu baris absensi ke tab bulanan dan tab "Semua Data".
- * @param data { nama, universitas, tanggal, hari, jam_masuk, jam_keluar }
+ * @param data { nama, universitas, tanggal, hari, jam_masuk, jam_keluar, keterangan }
  */
 export async function appendAbsen(data: {
   nama: string;
@@ -193,6 +193,7 @@ export async function appendAbsen(data: {
   hari: string;
   jam_masuk: string;
   jam_keluar: string;
+  keterangan?: string | null;
 }): Promise<void> {
   const month = data.tanggal.slice(0, 7); // YYYY-MM
 
@@ -204,12 +205,17 @@ export async function appendAbsen(data: {
   await ensureSheetExists('Semua Data');
   await ensureHeader('Semua Data', 0);
 
-  const row = [data.nama, data.universitas, data.tanggal, data.hari, data.jam_masuk, data.jam_keluar];
+  let ket = data.keterangan || '';
+  if (/^[=+\-@]/.test(ket)) {
+    ket = `'${ket}`;
+  }
+
+  const row = [data.nama, data.universitas, data.tanggal, data.hari, data.jam_masuk, data.jam_keluar, ket];
 
   // 3) Append ke tab bulanan
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `${month}!A:F`,
+    range: `${month}!A:G`,
     valueInputOption: 'RAW',
     requestBody: { values: [row] },
   });
@@ -217,7 +223,7 @@ export async function appendAbsen(data: {
   // 4) Append ke tab "Semua Data"
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: 'Semua Data!A:F',
+    range: 'Semua Data!A:G',
     valueInputOption: 'RAW',
     requestBody: { values: [row] },
   });

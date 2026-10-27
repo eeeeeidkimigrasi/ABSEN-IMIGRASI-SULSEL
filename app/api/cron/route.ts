@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   // 1. Retry sync ke Google Sheets
   const { data: pending, error: selectError } = await supabase
     .from('absensi')
-    .select('nama, universitas, tanggal, jam_masuk, jam_keluar')
+    .select('nama, universitas, tanggal, jam_masuk, jam_keluar, keterangan')
     .eq('synced_to_sheets', false)
     .order('waktu_kirim', { ascending: true })
     .limit(100);
@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
           hari,
           jam_masuk: row.jam_masuk,
           jam_keluar: row.jam_keluar,
+          keterangan: row.keterangan,
         });
         await supabase
           .from('absensi')

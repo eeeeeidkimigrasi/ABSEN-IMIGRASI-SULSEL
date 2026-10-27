@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     lng?: number;
     akurasi_gps?: number;
     konfirmasi_baru?: boolean;
+    keterangan?: string;
   };
 
   try {
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
   const lat = body.lat;
   const lng = body.lng;
   const akurasi_gps = body.akurasi_gps;
+  const keterangan = body.keterangan ? rapikan(body.keterangan).slice(0, 100) : null;
 
   if (!nama || !universitas || !jam_masuk || !jam_keluar) {
     return NextResponse.json({ ok: false, error: 'Isian belum lengkap.' }, { status: 400 });
@@ -122,6 +124,7 @@ export async function POST(req: NextRequest) {
         lat,
         lng,
         akurasi_gps,
+        keterangan,
         synced_to_sheets: false,
       },
       { onConflict: 'nama_key,univ_key,tanggal' }
@@ -133,7 +136,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await appendAbsen({ nama, universitas, tanggal, hari, jam_masuk, jam_keluar });
+    await appendAbsen({ nama, universitas, tanggal, hari, jam_masuk, jam_keluar, keterangan });
     await supabase
       .from('absensi')
       .update({ synced_to_sheets: true })
