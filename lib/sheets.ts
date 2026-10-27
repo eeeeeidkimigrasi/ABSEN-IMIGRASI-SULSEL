@@ -228,3 +228,187 @@ export async function appendAbsen(data: {
     requestBody: { values: [row] },
   });
 }
+
+const HEADER_IZIN = ['NAMA', 'UNIVERSITAS', 'TANGGAL', 'HARI', 'JENIS', 'KETERANGAN', 'LINK SURAT'];
+const COLUMN_WIDTHS_IZIN = [220, 240, 110, 110, 150, 220, 220];
+
+async function ensureIzinSheetExists(): Promise<number> {
+  const sheetName = 'Izin';
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const existing = meta.data.sheets?.find((s) => s.properties?.title === sheetName);
+  if (existing?.properties?.sheetId != null) {
+    return existing.properties.sheetId;
+  }
+
+  const addSheetReq: sheets_v4.Schema$BatchUpdateSpreadsheetRequest = {
+    requests: [
+      {
+        addSheet: {
+          properties: {
+            title: sheetName,
+            gridProperties: {
+              frozenRowCount: 1,
+            },
+          },
+        },
+      },
+    ],
+  };
+  const res = await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: addSheetReq,
+  });
+  const newSheetId = res.data.replies?.[0]?.addSheet?.properties?.sheetId;
+  if (newSheetId == null) throw new Error(`Failed to create sheet ${sheetName}`);
+
+  await formatIzinSheet(newSheetId);
+  return newSheetId;
+}
+
+async function formatIzinSheet(sheetId: number): Promise<void> {
+  const requests: sheets_v4.Schema$Request[] = [];
+
+  requests.push({
+    repeatCell: {
+      range: {
+        sheetId,
+        startRowIndex: 0,
+        endRowIndex: 1,
+        startColumnIndex: 0,
+        endColumnIndex: 7,
+      },
+      cell: {
+        userEnteredFormat: {
+          textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
+          backgroundColor: { red: 0.12, green: 0.24, blue: 0.45 },
+          horizontalAlignment: 'CENTER',
+          verticalAlignment: 'MIDDLE',
+          borders: {
+            top: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+            bottom: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+            left: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+            right: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+          },
+        },
+      },
+      fields: 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment,verticalAlignment,borders)',
+    },
+  });
+
+  COLUMN_WIDTHS_IZIN.forEach((width, index) => {
+    requests.push({
+      updateDimensionProperties: {
+        range: {
+          sheetId,
+          dimension: 'COLUMNS',
+          startIndex: index,
+          endIndex: index + 1,
+        },
+        properties: { pixelSize: width },
+        fields: 'pixelSize',
+      },
+    });
+  });
+
+  requests.push({
+    setBasicFilter: {
+      filter: {
+        range: {
+          sheetId,
+          startRowIndex: 0,
+          startColumnIndex: 0,
+          endColumnIndex: 7,
+        },
+      },
+    },
+  });
+
+  if (requests.length > 0) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests },
+    });
+  }
+}
+
+async function ensureIzinHeader(sheetName: string, sheetId: number): Promise<void> {
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${sheetName}!A1:G1`,
+  });
+  const values = res.data.values;
+  if (!values || values.length === 0) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${sheetName}!A1:G1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [HEADER_IZIN] },
+    });
+  }
+}
+
+export async function appendIzin(data: {
+  nama: string;
+  universitas: string;
+  tanggal: string;
+  hari: string;
+  jenis: string;
+  keterangan: string;
+  link_surat: string;
+}) {
+  const sheetName = 'Izin';
+  const sheetId = await ensureIzinSheetExists();
+  await ensureIzinHeader(sheetName, sheetId);
+
+  let ket = data.keterangan || '';
+  if (/^[=+\-@]/.test(ket)) {
+    ket = `'${ket}`;
+  }
+
+  const linkCol = data.link_surat || '';
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${sheetName}!A:G`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[data.nama, data.universitas, data.tanggal, data.hari, data.jenis, ket, linkCol]],
+    },
+  });
+}
+
+export async function deleteIzinRow(nama: string, universitas: string, tanggal: string) {
+  const sheetName = 'Izin';
+  const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+  const sheet = spreadsheet.data.sheets?.find(s => s.properties?.title === sheetName);
+  if (!sheet || sheet.properties?.sheetId == null) return;
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${sheetName}!A:C`,
+  });
+  const rows = res.data.values;
+  if (!rows) return;
+
+  const namaKey = nama.toLowerCase().trim();
+  const univKey = universitas.toLowerCase().trim();
+
+  const rowIndex = rows.findIndex((row) => 
+    row[0]?.toLowerCase().trim() === namaKey &&
+    row[1]?.toLowerCase().trim() === univKey &&
+    row[2]?.trim() === tanggal
+  );
+
+  if (rowIndex !== -1) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [{
+          deleteDimension: {
+            range: { sheetId: sheet.properties.sheetId, dimension: 'ROWS', startIndex: rowIndex, endIndex: rowIndex + 1 }
+          }
+        }]
+      }
+    });
+  }
+}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { appendAbsen } from '@/lib/sheets';
+import { appendAbsen, deleteIzinRow } from '@/lib/sheets';
 import { jarakMeter } from '@/lib/geo';
 import { getTodayDate, getDayName } from '@/lib/waktu';
 
@@ -83,32 +83,40 @@ export async function POST(req: NextRequest) {
 
   const tanggal = getTodayDate();
   const hari = getDayName(tanggal);
+  const nama_key = nama.toLowerCase().trim();
+  const univ_key = universitas.toLowerCase().trim();
 
   const existingToday = await supabase
     .from('absensi')
     .select('jam_keluar', { count: 'exact', head: true })
-    .eq('nama_key', nama.toLowerCase().trim())
-    .eq('univ_key', universitas.toLowerCase().trim())
+    .eq('nama_key', nama_key)
+    .eq('univ_key', univ_key)
     .eq('tanggal', tanggal);
 
   if (existingToday.count && existingToday.count > 0) {
     const row = await supabase
       .from('absensi')
       .select('jam_keluar')
-      .eq('nama_key', nama.toLowerCase().trim())
-      .eq('univ_key', universitas.toLowerCase().trim())
+      .eq('nama_key', nama_key)
+      .eq('univ_key', univ_key)
       .eq('tanggal', tanggal)
       .single();
     return NextResponse.json({ status: 'sudah_absen', jam_keluar: row.data?.jam_keluar || '' });
   }
 
-  const existing = await supabase
+  const { count: absensiAny } = await supabase
     .from('absensi')
-    .select('nama_key', { count: 'exact', head: true })
-    .eq('nama_key', nama.toLowerCase().trim())
-    .eq('univ_key', universitas.toLowerCase().trim());
+    .select('*', { count: 'exact', head: true })
+    .eq('nama_key', nama_key)
+    .eq('univ_key', univ_key);
 
-  if (existing.count === 0 && !body.konfirmasi_baru) {
+  const { count: izinAny } = await supabase
+    .from('izin')
+    .select('*', { count: 'exact', head: true })
+    .eq('nama_key', nama_key)
+    .eq('univ_key', univ_key);
+
+  if ((!absensiAny || absensiAny === 0) && (!izinAny || izinAny === 0) && !body.konfirmasi_baru) {
     return NextResponse.json({ status: 'nama_baru' });
   }
 
@@ -140,9 +148,23 @@ export async function POST(req: NextRequest) {
     await supabase
       .from('absensi')
       .update({ synced_to_sheets: true })
-      .eq('nama_key', nama.toLowerCase().trim())
-      .eq('univ_key', universitas.toLowerCase().trim())
+      .eq('nama_key', nama_key)
+      .eq('univ_key', univ_key)
       .eq('tanggal', tanggal);
+    
+    // Hapus izin hari ini jika ada
+    await supabase
+      .from('izin')
+      .delete()
+      .eq('nama_key', nama_key)
+      .eq('univ_key', univ_key)
+      .eq('tanggal', tanggal);
+      
+    try {
+      await deleteIzinRow(nama, universitas, tanggal);
+    } catch (sheetsError) {
+      console.error('Sheets delete izin failed:', sheetsError);
+    }
   } catch (sheetsError) {
     console.error('Sheets sync failed:', sheetsError);
   }
