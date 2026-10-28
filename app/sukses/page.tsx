@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
@@ -13,6 +13,13 @@ function SuksesContent() {
   const jam_masuk = searchParams.get('jam_masuk');
   const jam_keluar = searchParams.get('jam_keluar');
   const jenis = searchParams.get('jenis');
+
+  const judul =
+    mode === 'izin'
+      ? 'Izin Berhasil Dikirim!'
+      : mode === 'pulang'
+      ? 'Absen Pulang Berhasil!'
+      : 'Absen Hadir Berhasil!';
 
   return (
     <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center">
@@ -32,9 +39,7 @@ function SuksesContent() {
           ></path>
         </svg>
       </div>
-      <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-        {mode === 'izin' ? 'Izin Berhasil Dikirim!' : 'Absen Berhasil!'}
-      </h1>
+      <h1 className="text-2xl font-semibold text-gray-900 mb-2">{judul}</h1>
       <p className="text-gray-600 mb-6">Data Anda telah tersimpan di sistem.</p>
 
       <div className="bg-gray-50 rounded-lg p-4 text-left space-y-3 mb-6">
@@ -52,14 +57,12 @@ function SuksesContent() {
             <div className="font-medium text-gray-900">{jenis}</div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wider">Masuk</div>
-              <div className="font-medium text-gray-900">{jam_masuk}</div>
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wider">
+              {mode === 'pulang' ? 'Jam Keluar' : 'Jam Masuk'}
             </div>
-            <div>
-              <div className="text-xs text-gray-500 uppercase tracking-wider">Keluar</div>
-              <div className="font-medium text-gray-900">{jam_keluar}</div>
+            <div className="font-medium text-gray-900">
+              {mode === 'pulang' ? jam_keluar : jam_masuk}
             </div>
           </div>
         )}

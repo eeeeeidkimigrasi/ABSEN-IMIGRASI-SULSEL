@@ -1,4 +1,4 @@
-import { google, sheets_v4 } from 'googleapis';
+﻿import { google, sheets_v4 } from 'googleapis';
 
 const clientEmail = process.env.GOOGLE_CLIENT_EMAIL!;
 const privateKey = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
@@ -192,7 +192,7 @@ export async function appendAbsen(data: {
   tanggal: string;
   hari: string;
   jam_masuk: string;
-  jam_keluar: string;
+  jam_keluar?: string | null;
   keterangan?: string | null;
 }): Promise<void> {
   const month = data.tanggal.slice(0, 7); // YYYY-MM
@@ -210,7 +210,7 @@ export async function appendAbsen(data: {
     ket = `'${ket}`;
   }
 
-  const row = [data.nama, data.universitas, data.tanggal, data.hari, data.jam_masuk, data.jam_keluar, ket];
+  const row = [data.nama, data.universitas, data.tanggal, data.hari, data.jam_masuk, data.jam_keluar || '', ket];
 
   // 3) Append ke tab bulanan
   await sheets.spreadsheets.values.append({
@@ -464,7 +464,7 @@ function sanitizeForSheets(value: string): string {
 
 export async function updateAbsenRow(
   lama: { nama: string; universitas: string; tanggal: string },
-  baru: { nama: string; universitas: string; tanggal: string; hari: string; jam_masuk: string; jam_keluar: string; keterangan?: string | null }
+  baru: { nama: string; universitas: string; tanggal: string; hari: string; jam_masuk: string; jam_keluar?: string | null; keterangan?: string | null }
 ): Promise<void> {
   if (lama.tanggal.slice(0, 7) !== baru.tanggal.slice(0, 7)) {
     await deleteAbsenRows(lama.nama, lama.universitas, lama.tanggal);
@@ -478,7 +478,7 @@ export async function updateAbsenRow(
     `'${baru.tanggal}`,
     baru.hari,
     baru.jam_masuk,
-    baru.jam_keluar,
+    baru.jam_keluar || '',
     sanitizeForSheets(baru.keterangan || ''),
   ];
 
@@ -562,3 +562,50 @@ export async function updateIzinRow(
   }
 }
 
+export async function updateJamKeluarRow(
+  data: { nama: string; universitas: string; tanggal: string; jam_keluar: string; keterangan?: string | null }
+): Promise<void> {
+  const month = data.tanggal.slice(0, 7);
+  const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+  const hasKet = data.keterangan !== undefined && data.keterangan !== null && data.keterangan.trim() !== '';
+
+  for (const tabName of ['Semua Data', month]) {
+    const sheet = spreadsheet.data.sheets?.find((s) => s.properties?.title === tabName);
+    if (!sheet) continue;
+
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${tabName}!A:C`,
+    });
+
+    const rows = res.data.values;
+    if (!rows) continue;
+
+    const rowIndex = rows.findIndex(
+      (row, idx) =>
+        idx > 0 &&
+        row[0]?.toLowerCase().trim() === data.nama.toLowerCase().trim() &&
+        row[1]?.toLowerCase().trim() === data.universitas.toLowerCase().trim() &&
+        row[2]?.replace(/^'/, '').trim() === data.tanggal
+    );
+
+    if (rowIndex != null && rowIndex > 0) {
+      const rowNum = rowIndex + 1;
+      if (hasKet) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `${tabName}!F${rowNum}:G${rowNum}`,
+          valueInputOption: 'RAW',
+          requestBody: { values: [[data.jam_keluar, sanitizeForSheets(data.keterangan!.trim())]] },
+        });
+      } else {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `${tabName}!F${rowNum}`,
+          valueInputOption: 'RAW',
+          requestBody: { values: [[data.jam_keluar]] },
+        });
+      }
+    }
+  }
+}
