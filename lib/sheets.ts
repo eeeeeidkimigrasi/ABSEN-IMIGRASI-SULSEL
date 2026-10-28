@@ -412,3 +412,153 @@ export async function deleteIzinRow(nama: string, universitas: string, tanggal: 
     });
   }
 }
+
+export async function deleteAbsenRows(nama: string, universitas: string, tanggal: string): Promise<void> {
+  const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+
+  for (const tabName of ['Semua Data', tanggal.slice(0, 7)]) {
+    const sheet = spreadsheet.data.sheets?.find((s) => s.properties?.title === tabName);
+    if (!sheet || sheet.properties?.sheetId == null) continue;
+
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${tabName}!A:C`,
+    });
+
+    const rows = res.data.values;
+    if (!rows) continue;
+
+    const rowIndex = rows.findIndex((row, idx) => 
+      idx > 0 && 
+      row[0]?.toLowerCase().trim() === nama.toLowerCase().trim() && 
+      row[1]?.toLowerCase().trim() === universitas.toLowerCase().trim() && 
+      row[2]?.trim() === tanggal
+    );
+
+    if (rowIndex != null && rowIndex > 0) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [{
+            deleteDimension: {
+              range: { 
+                sheetId: sheet.properties.sheetId, 
+                dimension: 'ROWS', 
+                startIndex: rowIndex, 
+                endIndex: rowIndex + 1 
+              }
+            }
+          }]
+        }
+      });
+    }
+  }
+}
+function sanitizeForSheets(value: string): string {
+  let ket = value || '';
+  if (/^[=+\-@]/.test(ket)) {
+    ket = `'${ket}`;
+  }
+  return ket;
+}
+
+export async function updateAbsenRow(
+  lama: { nama: string; universitas: string; tanggal: string },
+  baru: { nama: string; universitas: string; tanggal: string; hari: string; jam_masuk: string; jam_keluar: string; keterangan?: string | null }
+): Promise<void> {
+  if (lama.tanggal.slice(0, 7) !== baru.tanggal.slice(0, 7)) {
+    await deleteAbsenRows(lama.nama, lama.universitas, lama.tanggal);
+    await appendAbsen(baru);
+    return;
+  }
+
+  const rowData = [
+    baru.nama,
+    baru.universitas,
+    `'${baru.tanggal}`,
+    baru.hari,
+    baru.jam_masuk,
+    baru.jam_keluar,
+    sanitizeForSheets(baru.keterangan || ''),
+  ];
+
+  const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+
+  for (const tabName of ['Semua Data', baru.tanggal.slice(0, 7)]) {
+    const sheet = spreadsheet.data.sheets?.find((s) => s.properties?.title === tabName);
+    if (!sheet) continue;
+
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${tabName}!A:C`,
+    });
+
+    const rows = res.data.values;
+    if (!rows) continue;
+
+    const rowIndex = rows.findIndex((row, idx) =>
+      idx > 0 &&
+      row[0]?.toLowerCase().trim() === lama.nama.toLowerCase().trim() &&
+      row[1]?.toLowerCase().trim() === lama.universitas.toLowerCase().trim() &&
+      row[2]?.trim() === lama.tanggal
+    );
+
+    if (rowIndex != null && rowIndex > 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${tabName}!A${rowIndex + 1}:G${rowIndex + 1}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [rowData] },
+      });
+    }
+  }
+}
+
+
+export async function updateIzinRow(
+  lama: { nama: string; universitas: string; tanggal: string },
+  baru: { nama: string; universitas: string; tanggal: string; hari: string; jenis: string; keterangan?: string | null; link_surat?: string | null }
+): Promise<void> {
+  const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+  const sheet = spreadsheet.data.sheets?.find((s) => s.properties?.title === 'Izin');
+
+  if (!sheet) {
+    await appendIzin({ ...baru, keterangan: baru.keterangan || '', link_surat: baru.link_surat || '' });
+    return;
+  }
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: 'Izin!A:C',
+  });
+
+  const rows = res.data.values;
+  if (!rows) return;
+
+  const rowIndex = rows.findIndex((row, idx) =>
+    idx > 0 &&
+    row[0]?.toLowerCase().trim() === lama.nama.toLowerCase().trim() &&
+    row[1]?.toLowerCase().trim() === lama.universitas.toLowerCase().trim() &&
+    row[2]?.trim() === lama.tanggal
+  );
+
+  const rowData = [
+    baru.nama,
+    baru.universitas,
+    `'${baru.tanggal}`,
+    baru.hari,
+    baru.jenis,
+    sanitizeForSheets(baru.keterangan || ''),
+    baru.link_surat || ''
+  ];
+
+  if (rowIndex != null && rowIndex > 0) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `Izin!A${rowIndex + 1}:G${rowIndex + 1}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [rowData] },
+    });
+  }
+}
+

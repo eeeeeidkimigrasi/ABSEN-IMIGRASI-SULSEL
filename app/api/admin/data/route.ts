@@ -16,9 +16,20 @@ export async function GET(req: NextRequest) {
     return handleRiwayat(searchParams);
   } else if (tipe === 'izin') {
     return handleIzin(searchParams);
+  } else if (tipe === 'log') {
+    return handleLog();
   }
 
   return NextResponse.json({ error: 'Tipe tidak valid' }, { status: 400 });
+}
+
+async function handleLog() {
+  const { data } = await supabase
+    .from('admin_log')
+    .select('id, waktu, aksi, tabel, sebelum, sesudah, sheets_ok')
+    .order('waktu', { ascending: false })
+    .limit(50);
+  return NextResponse.json(data || []);
 }
 
 async function handleSummary() {
@@ -56,7 +67,14 @@ async function handleSummary() {
 
   const belum = uniqueAktif.filter(a => !hadirKeys.has(`${a.nama_key}|${a.univ_key}`) && !izinKeys.has(`${a.nama_key}|${a.univ_key}`));
 
-  return NextResponse.json({ hadir: hadir || [], izin: izin || [], belum });
+  // 4. Logs admin
+  const { data: logsData } = await supabase
+    .from('admin_log')
+    .select('id, waktu, aksi, tabel, sebelum, sesudah, sheets_ok')
+    .order('waktu', { ascending: false })
+    .limit(50);
+
+  return NextResponse.json({ hadir: hadir || [], izin: izin || [], belum, logs: logsData || [] });
 }
 
 async function handleRekap(params: URLSearchParams) {

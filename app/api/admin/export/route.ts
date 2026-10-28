@@ -92,6 +92,22 @@ export async function GET(req: NextRequest) {
     data.forEach(r => {
       csvContent += `${r.tanggal},${escapeCSV(r.nama)},${escapeCSV(r.universitas)},${escapeCSV(r.jenis)},${escapeCSV(r.keterangan)},${escapeCSV(r.link_surat)}\n`;
     });
+  } else if (tipe === 'log') {
+    const { data } = await supabase
+      .from('admin_log')
+      .select('waktu,aksi,tabel,sheets_ok,sebelum,sesudah')
+      .order('waktu', { ascending: false })
+      .limit(MAX_ROWS);
+    if (!data) return new Response('No data', { status: 404 });
+
+    filename = `log-admin-${new Date().toISOString().split('T')[0]}.csv`;
+    csvContent = '\uFEFFWAKTU,AKSI,TABEL,SHEETS_OK,SEBELUM,SESUDAH\n';
+    data.forEach(r => {
+      const sebelum = r.sebelum ? JSON.stringify(r.sebelum) : '';
+      const sesudah = r.sesudah ? JSON.stringify(r.sesudah) : '';
+      csvContent += `${escapeCSV(r.waktu)},${escapeCSV(r.aksi)},${escapeCSV(r.tabel)},${escapeCSV(r.sheets_ok)},${escapeCSV(sebelum)},${escapeCSV(sesudah)}\n`;
+    });
+
   } else {
     return new Response('Tipe tidak valid', { status: 400 });
   }
