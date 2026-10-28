@@ -72,9 +72,7 @@ export async function POST(req: NextRequest) {
     .eq('tanggal', tanggal)
     .maybeSingle();
 
-  if (absensiConflict) {
-    return NextResponse.json({ error: 'Hapus absensi hari itu dulu' }, { status: 409 });
-  }
+  // Diizinkan tambah/edit izin walau ada absensi
 
   const { data: izinConflict } = await supabase
     .from('izin')
@@ -215,9 +213,7 @@ export async function PUT(req: NextRequest) {
       .eq('tanggal', tanggal)
       .maybeSingle();
 
-    if (absensiConflict) {
-      return NextResponse.json({ error: 'Hapus absensi hari itu dulu' }, { status: 409 });
-    }
+    // Diizinkan tambah/edit izin walau ada absensi
   }
 
   const { data: updatedRow, error: updateError } = await supabase

@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { appendAbsen, deleteIzinRow, updateJamKeluarRow } from '@/lib/sheets';
 import { jarakMeter } from '@/lib/geo';
@@ -146,18 +146,7 @@ export async function POST(req: NextRequest) {
         .eq('univ_key', univ_key)
         .eq('tanggal', tanggal);
 
-      await supabase
-        .from('izin')
-        .delete()
-        .eq('nama_key', nama_key)
-        .eq('univ_key', univ_key)
-        .eq('tanggal', tanggal);
-
-      try {
-        await deleteIzinRow(nama, universitas, tanggal);
-      } catch (e) {
-        console.error('Sheets delete izin failed:', e);
-      }
+      // Izin hari ini tetap dipertahankan
     } catch (e) {
       console.error('Sheets sync failed:', e);
     }

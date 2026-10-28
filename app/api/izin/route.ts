@@ -84,9 +84,7 @@ export async function POST(req: NextRequest) {
     .eq('univ_key', univ_key)
     .eq('tanggal', tanggal);
 
-  if (hadirCount && hadirCount > 0) {
-    return NextResponse.json({ status: 'sudah_hadir' });
-  }
+  // Diizinkan izin walau sudah hadir
 
   // 2. Cek sudah izin hari ini
   const { count: izinCount } = await supabase

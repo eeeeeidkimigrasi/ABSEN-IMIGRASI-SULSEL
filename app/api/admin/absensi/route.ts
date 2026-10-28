@@ -61,9 +61,7 @@ export async function POST(req: NextRequest) {
     .eq('univ_key', univ_key)
     .eq('tanggal', tanggal);
 
-  if (izin && izin.length > 0) {
-    return NextResponse.json({ error: 'Hapus izin hari itu dulu.' }, { status: 409 });
-  }
+  // Diizinkan tambah/edit absensi walau ada izin
 
   const { error } = await supabase.from('absensi').insert({
     nama,
@@ -149,9 +147,7 @@ export async function PUT(req: NextRequest) {
     .eq('univ_key', new_univ_key)
     .eq('tanggal', tanggal);
 
-  if (izin && izin.length > 0) {
-    return NextResponse.json({ error: 'Hapus izin hari itu dulu.' }, { status: 409 });
-  }
+  // Diizinkan tambah/edit absensi walau ada izin
 
   const { data: oldRow } = await supabase
     .from('absensi')
