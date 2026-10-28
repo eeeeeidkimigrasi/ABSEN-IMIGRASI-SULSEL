@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 
@@ -75,7 +75,7 @@ export function RiwayatTab() {
       universitas: r.universitas || '',
       tanggal: r.tanggal || '',
       jam_masuk: (r.jam_masuk || '08:00').slice(0, 5),
-      jam_keluar: (r.jam_keluar || '16:00').slice(0, 5),
+      jam_keluar: (r.jam_keluar || '').slice(0, 5),
       keterangan: r.keterangan || '',
     });
     setFormError(null);
@@ -260,7 +260,7 @@ export function RiwayatTab() {
                   <td className="px-4 py-3 font-medium">{r.nama}</td>
                   <td className="px-4 py-3">{r.universitas}</td>
                   <td className="px-4 py-3">{r.jam_masuk}</td>
-                  <td className="px-4 py-3">{r.jam_keluar}</td>
+                  <td className="px-4 py-3">{r.jam_keluar || '-'}</td>
                   <td className="px-4 py-3 text-gray-500">{r.keterangan || '-'}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-right space-x-2">
                     <button
@@ -377,9 +377,7 @@ export function RiwayatTab() {
                 <div>
                   <label className="block font-medium text-gray-700 mb-1">Jam Keluar</label>
                   <input
-                    type="time"
-                    required
-                    value={form.jam_keluar}
+                    type="time" value={form.jam_keluar}
                     onChange={(e) => setForm({ ...form, jam_keluar: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg"
                   />

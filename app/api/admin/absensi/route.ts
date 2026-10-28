@@ -44,10 +44,10 @@ export async function POST(req: NextRequest) {
   const universitas = rapikan(body.universitas || '');
   const tanggal = body.tanggal?.trim();
   const jam_masuk = body.jam_masuk?.trim();
-  const jam_keluar = body.jam_keluar?.trim();
+  const jam_keluar = body.jam_keluar?.trim() || null;
   const keterangan = body.keterangan ? rapikan(body.keterangan).slice(0, 100) : null;
 
-  if (!nama || !universitas || !tanggal || !jam_masuk || !jam_keluar || !validateDate(tanggal)) {
+  if (!nama || !universitas || !tanggal || !jam_masuk || !validateDate(tanggal) || (jam_keluar !== null && jam_keluar < jam_masuk)) {
     return NextResponse.json({ error: 'Data tidak valid atau tanggal di masa depan.' }, { status: 400 });
   }
 
@@ -130,10 +130,10 @@ export async function PUT(req: NextRequest) {
   const universitas = rapikan(body.universitas || '');
   const tanggal = body.tanggal?.trim();
   const jam_masuk = body.jam_masuk?.trim();
-  const jam_keluar = body.jam_keluar?.trim();
+  const jam_keluar = body.jam_keluar?.trim() || null;
   const keterangan = body.keterangan ? rapikan(body.keterangan).slice(0, 100) : null;
 
-  if (!oldNama || !oldUniv || !oldTanggal || !nama || !universitas || !tanggal || !jam_masuk || !jam_keluar || !validateDate(tanggal)) {
+  if (!oldNama || !oldUniv || !oldTanggal || !nama || !universitas || !tanggal || !jam_masuk || !validateDate(tanggal) || (jam_keluar !== null && jam_keluar < jam_masuk)) {
     return NextResponse.json({ error: 'Data tidak valid atau tanggal di masa depan.' }, { status: 400 });
   }
 

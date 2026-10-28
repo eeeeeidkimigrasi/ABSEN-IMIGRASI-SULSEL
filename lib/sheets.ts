@@ -609,3 +609,33 @@ export async function updateJamKeluarRow(
     }
   }
 }
+
+export async function syncAbsenRow(data: {
+  nama: string;
+  universitas: string;
+  tanggal: string;
+  hari: string;
+  jam_masuk: string;
+  jam_keluar?: string | null;
+  keterangan?: string | null;
+}): Promise<void> {
+  const res = await sheets.spreadsheets.values
+    .get({ spreadsheetId, range: 'Semua Data!A:C' })
+    .catch(() => null);
+  const rows = res?.data.values || [];
+  const ada = rows.some(
+    (row, idx) =>
+      idx > 0 &&
+      row[0]?.toLowerCase().trim() === data.nama.toLowerCase().trim() &&
+      row[1]?.toLowerCase().trim() === data.universitas.toLowerCase().trim() &&
+      row[2]?.replace(/^'/, '').trim() === data.tanggal
+  );
+  if (ada) {
+    await updateAbsenRow(
+      { nama: data.nama, universitas: data.universitas, tanggal: data.tanggal },
+      { ...data, jam_keluar: data.jam_keluar || '' }
+    );
+  } else {
+    await appendAbsen(data);
+  }
+}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { appendAbsen, appendIzin } from '@/lib/sheets';
+import { syncAbsenRow, appendIzin } from '@/lib/sheets';
 import { getDayName } from '@/lib/waktu';
 
 const CRON_SECRET = process.env.CRON_SECRET!;
@@ -29,13 +29,13 @@ export async function GET(req: NextRequest) {
     for (const row of pending) {
       try {
         const hari = getDayName(row.tanggal);
-        await appendAbsen({
+        await syncAbsenRow({
           nama: row.nama,
           universitas: row.universitas,
           tanggal: row.tanggal,
           hari,
-          jam_masuk: row.jam_masuk,
-          jam_keluar: row.jam_keluar,
+          jam_masuk: String(row.jam_masuk).slice(0, 5),
+          jam_keluar: row.jam_keluar ? String(row.jam_keluar).slice(0, 5) : '',
           keterangan: row.keterangan,
         });
         await supabase

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 
@@ -14,6 +14,8 @@ export function HariIniTab() {
 
   if (loading) return <div className="py-10 text-center">Memuat data...</div>;
   if (!data) return null;
+
+  const belumPulang = data.hadir.filter((h) => !h.jam_keluar);
 
   return (
     <div className="space-y-8">
@@ -35,14 +37,30 @@ export function HariIniTab() {
                 <tr key={i}>
                   <td className="px-4 py-3">{h.nama}</td>
                   <td className="px-4 py-3">{h.universitas}</td>
-                  <td className="px-4 py-3">{h.jam_masuk}</td>
-                  <td className="px-4 py-3">{h.jam_keluar}</td>
+                  <td className="px-4 py-3">{String(h.jam_masuk).slice(0, 5)}</td>
+                  <td className="px-4 py-3">{h.jam_keluar ? String(h.jam_keluar).slice(0, 5) : '-'}</td>
                   <td className="px-4 py-3 text-gray-500">{h.keterangan || '-'}</td>
                 </tr>
               ))}
               {data.hadir.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">Belum ada yang hadir</td></tr>}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-semibold mb-4 text-blue-700">Belum Pulang ({belumPulang.length})</h2>
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {belumPulang.map((b, i) => (
+              <div key={i} className="p-3 border rounded bg-blue-50">
+                <div className="font-medium">{b.nama}</div>
+                <div className="text-xs text-gray-500 uppercase">{b.universitas}</div>
+                <div className="text-xs text-gray-600 mt-1">Masuk {String(b.jam_masuk).slice(0, 5)}</div>
+              </div>
+            ))}
+          </div>
+          {belumPulang.length === 0 && <div className="text-center text-gray-400 py-4">Tidak ada yang menunggu pulang</div>}
         </div>
       </section>
 
