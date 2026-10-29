@@ -64,22 +64,24 @@ export function RekapTab() {
             <tr>
               <th className="px-4 py-3 cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('nama')}>Nama {sortCol === 'nama' && (sortDir === 'asc' ? '↑' : '↓')}</th>
               <th className="px-4 py-3 cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('universitas')}>Universitas {sortCol === 'universitas' && (sortDir === 'asc' ? '↑' : '↓')}</th>
+              <th className="px-4 py-3">Periode Magang</th>
               <th className="px-4 py-3 cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('count')}>Jumlah Hadir {sortCol === 'count' && (sortDir === 'asc' ? '↑' : '↓')}</th>
               <th className="px-4 py-3 cursor-pointer hover:bg-gray-100" onClick={() => toggleSort('terakhir')}>Terakhir Hadir {sortCol === 'terakhir' && (sortDir === 'asc' ? '↑' : '↓')}</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {loading ? (
-              <tr><td colSpan={4} className="px-4 py-10 text-center text-gray-400">Memuat...</td></tr>
+              <tr><td colSpan={5} className="px-4 py-10 text-center text-gray-400">Memuat...</td></tr>
             ) : sortedData.map((r, i) => (
               <tr key={i}>
                 <td className="px-4 py-3 font-medium">{r.nama}</td>
                 <td className="px-4 py-3">{r.universitas}</td>
+                <td className="px-4 py-3 text-gray-600 text-xs">{r.tgl_mulai && r.tgl_selesai ? `${r.tgl_mulai} s/d ${r.tgl_selesai}` : '-'}</td>
                 <td className="px-4 py-3 text-center">{r.count}</td>
                 <td className="px-4 py-3">{r.terakhir}</td>
               </tr>
             ))}
-            {!loading && sortedData.length === 0 && <tr><td colSpan={4} className="px-4 py-10 text-center text-gray-400">Tidak ada data</td></tr>}
+            {!loading && sortedData.length === 0 && <tr><td colSpan={5} className="px-4 py-10 text-center text-gray-400">Tidak ada data</td></tr>}
           </tbody>
         </table>
       </div>

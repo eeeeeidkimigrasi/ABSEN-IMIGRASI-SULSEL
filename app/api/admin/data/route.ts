@@ -83,7 +83,7 @@ async function handleRekap(params: URLSearchParams) {
 
   let query = supabase
     .from('absensi')
-    .select('nama, universitas, tanggal, nama_key, univ_key');
+    .select('nama, universitas, tanggal, nama_key, univ_key, tgl_mulai, tgl_selesai');
 
   if (search) {
     query = query.ilike('nama', `%${search}%`);
@@ -93,17 +93,26 @@ async function handleRekap(params: URLSearchParams) {
   if (!data) return NextResponse.json([]);
 
   // Aggregate by person
-  const rekapMap = new Map<string, { nama: string; universitas: string; count: number; terakhir: string }>();
+  const rekapMap = new Map<string, { nama: string; universitas: string; count: number; terakhir: string; tgl_mulai: string | null; tgl_selesai: string | null }>();
   
   const now = new Date();
   const threshold = new Date();
   threshold.setDate(now.getDate() - ACTIVE_DAYS);
 
-  for (const row of data) {
+  for (const row of data as any[]) {
     const key = `${row.nama_key}|${row.univ_key}`;
-    const entry = rekapMap.get(key) || { nama: row.nama, universitas: row.universitas, count: 0, terakhir: row.tanggal };
+    const entry = rekapMap.get(key) || {
+      nama: row.nama,
+      universitas: row.universitas,
+      count: 0,
+      terakhir: row.tanggal,
+      tgl_mulai: row.tgl_mulai || null,
+      tgl_selesai: row.tgl_selesai || null,
+    };
     entry.count++;
     if (row.tanggal > entry.terakhir) entry.terakhir = row.tanggal;
+    if (row.tgl_mulai && !entry.tgl_mulai) entry.tgl_mulai = row.tgl_mulai;
+    if (row.tgl_selesai && !entry.tgl_selesai) entry.tgl_selesai = row.tgl_selesai;
     rekapMap.set(key, entry);
   }
 

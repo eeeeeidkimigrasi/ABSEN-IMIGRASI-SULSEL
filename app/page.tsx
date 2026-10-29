@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
@@ -11,6 +11,8 @@ type FormData = {
   keterangan: string;
   jenis: string;
   link_surat: string;
+  tgl_mulai: string;
+  tgl_selesai: string;
 };
 
 type Mode = 'hadir' | 'pulang' | 'izin';
@@ -26,6 +28,8 @@ export default function AbsenPage() {
     keterangan: '',
     jenis: 'Sakit',
     link_surat: '',
+    tgl_mulai: '',
+    tgl_selesai: '',
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -93,6 +97,8 @@ export default function AbsenPage() {
           lng,
           akurasi_gps: accuracy,
           konfirmasi_baru,
+          tgl_mulai: form.tgl_mulai,
+          tgl_selesai: form.tgl_selesai,
         };
         if (mode === 'hadir') payload.jam_masuk = form.jam_masuk;
         if (mode === 'pulang') payload.jam_keluar = form.jam_keluar;
@@ -165,8 +171,7 @@ export default function AbsenPage() {
             universitas: form.universitas,
             jenis: form.jenis,
             keterangan: form.keterangan,
-            link_surat: form.link_surat,
-            konfirmasi_baru,
+            link_surat: form.link_surat, konfirmasi_baru, tgl_mulai: form.tgl_mulai, tgl_selesai: form.tgl_selesai,
           }),
         });
         const data = await res.json();
@@ -219,9 +224,36 @@ export default function AbsenPage() {
               <p><strong>Nama:</strong> {form.nama}</p>
               <p><strong>Kampus:</strong> {form.universitas}</p>
             </div>
+            <div className="space-y-3 mb-4 text-left">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Tanggal Mulai Magang</label>
+                <input name="tgl_mulai" type="date" required value={form.tgl_mulai} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Tanggal Selesai Magang</label>
+                <input name="tgl_selesai" type="date" required value={form.tgl_selesai} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+            </div>
             <div className="flex gap-2">
               <button type="button" onClick={() => setShowConfirm(false)} className="flex-1 py-2 border rounded">Periksa kembali</button>
-              <button type="button" onClick={() => { setShowConfirm(false); handleSubmit(null, true); }} className="flex-1 py-2 bg-blue-600 text-white rounded">Kirim, saya baru</button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!form.tgl_mulai || !form.tgl_selesai) {
+                    alert('Mohon isi Tanggal Mulai dan Tanggal Selesai magang terlebih dahulu.');
+                    return;
+                  }
+                  if (form.tgl_selesai < form.tgl_mulai) {
+                    alert('Tanggal selesai tidak boleh lebih awal dari tanggal mulai.');
+                    return;
+                  }
+                  setShowConfirm(false);
+                  handleSubmit(null, true);
+                }}
+                className="flex-1 py-2 bg-blue-600 text-white rounded"
+              >
+                Kirim, saya baru
+              </button>
             </div>
           </div>
         </div>

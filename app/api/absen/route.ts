@@ -43,6 +43,8 @@ export async function POST(req: NextRequest) {
     akurasi_gps?: number;
     konfirmasi_baru?: boolean;
     keterangan?: string;
+    tgl_mulai?: string;
+    tgl_selesai?: string;
   };
 
   try {
@@ -102,14 +104,26 @@ export async function POST(req: NextRequest) {
       .eq('nama_key', nama_key)
       .eq('univ_key', univ_key);
 
-    if ((!absensiAny || absensiAny === 0) && (!izinAny || izinAny === 0) && !body.konfirmasi_baru) {
-      return NextResponse.json({ status: 'nama_baru' });
+    if ((!absensiAny || absensiAny === 0) && (!izinAny || izinAny === 0)) {
+      if (!body.konfirmasi_baru) {
+        return NextResponse.json({ status: 'nama_baru' });
+      }
+      const tgl_mulai = body.tgl_mulai?.trim();
+      const tgl_selesai = body.tgl_selesai?.trim();
+      if (!tgl_mulai || !tgl_selesai || tgl_selesai < tgl_mulai) {
+        return NextResponse.json({ ok: false, error: 'Tanggal mulai dan selesai magang wajib diisi dengan benar.' }, { status: 400 });
+      }
+      await supabase
+        .from('peserta')
+        .upsert({ nama, universitas, nama_key: nama.toLowerCase(), univ_key: universitas.toLowerCase(), tgl_mulai, tgl_selesai }, { onConflict: 'nama_key,univ_key' });
     }
 
     const { error: dbError } = await supabase
       .from('absensi')
       .insert({
         nama,
+        tgl_mulai: body.tgl_mulai || null,
+        tgl_selesai: body.tgl_selesai || null,
         universitas,
         tanggal,
         jam_masuk,
