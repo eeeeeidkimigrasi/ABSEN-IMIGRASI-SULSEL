@@ -47,7 +47,6 @@ export default function AbsenPage() {
     } catch {}
   }, []);
 
-  // Set default jam masuk / jam keluar ke waktu sekarang saat mode berubah
   useEffect(() => {
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, '0');
@@ -83,7 +82,7 @@ export default function AbsenPage() {
         accuracy = pos.coords.accuracy;
       } catch {
         setLoading(false);
-        setError('Lokasi tidak terbaca. Izinkan akses lokasi di browser.');
+        setError('Lokasi tidak terbaca. Pastikan izin akses lokasi (GPS) diaktifkan pada browser Anda.');
         return;
       }
 
@@ -112,19 +111,19 @@ export default function AbsenPage() {
 
         if (data.status === 'sudah_hadir_hari_ini') {
           setLoading(false);
-          setStatusMsg(`Kamu sudah absen hadir hari ini (jam masuk ${data.jam_masuk || '-'}).`);
+          setStatusMsg(`Presensi hadir Anda sudah tercatat hari ini (Jam Masuk: ${data.jam_masuk || '-'}).`);
           return;
         }
 
         if (data.status === 'belum_hadir') {
           setLoading(false);
-          setError('Kamu belum absen hadir hari ini. Hubungi pembimbing.');
+          setError('Anda belum melakukan presensi hadir hari ini. Silakan hubungi pembimbing.');
           return;
         }
 
         if (data.status === 'sudah_pulang') {
           setLoading(false);
-          setStatusMsg(`Kamu sudah melakukan absen pulang hari ini (jam keluar ${data.jam_keluar}).`);
+          setStatusMsg(`Presensi pulang Anda sudah tercatat hari ini (Jam Keluar: ${data.jam_keluar}).`);
           return;
         }
 
@@ -140,9 +139,9 @@ export default function AbsenPage() {
           return;
         }
 
-        if (!res.ok || (data.ok === false)) {
+        if (!res.ok || data.ok === false) {
           setLoading(false);
-          setError(data.error || 'Terjadi kesalahan.');
+          setError(data.error || 'Terjadi kesalahan saat memproses data.');
           return;
         }
 
@@ -158,10 +157,9 @@ export default function AbsenPage() {
         }
       } catch {
         setLoading(false);
-        setError('Gagal mengirim, coba lagi.');
+        setError('Gagal menghubungi server. Periksa koneksi internet Anda dan coba lagi.');
       }
     } else {
-      // Mode Izin
       try {
         const res = await fetch('/api/izin', {
           method: 'POST',
@@ -171,19 +169,22 @@ export default function AbsenPage() {
             universitas: form.universitas,
             jenis: form.jenis,
             keterangan: form.keterangan,
-            link_surat: form.link_surat, konfirmasi_baru, tgl_mulai: form.tgl_mulai, tgl_selesai: form.tgl_selesai,
+            link_surat: form.link_surat,
+            konfirmasi_baru,
+            tgl_mulai: form.tgl_mulai,
+            tgl_selesai: form.tgl_selesai,
           }),
         });
         const data = await res.json();
 
         if (data.status === 'sudah_hadir') {
           setLoading(false);
-          setStatusMsg('Kamu sudah absen hadir hari ini, jadi izin tidak dicatat.');
+          setStatusMsg('Anda sudah tercatat hadir hari ini, pengajuan izin tidak dapat diproses.');
           return;
         }
         if (data.status === 'sudah_izin') {
           setLoading(false);
-          setStatusMsg('Izin hari ini sudah tercatat.');
+          setStatusMsg('Laporan izin Anda untuk hari ini sudah tercatat di sistem.');
           return;
         }
         if (data.status === 'nama_baru') {
@@ -192,9 +193,9 @@ export default function AbsenPage() {
           return;
         }
 
-        if (!res.ok || (data.ok === false)) {
+        if (!res.ok || data.ok === false) {
           setLoading(false);
-          setError(data.error || 'Terjadi kesalahan.');
+          setError(data.error || 'Terjadi kesalahan saat mengirim laporan izin.');
           return;
         }
 
@@ -206,159 +207,382 @@ export default function AbsenPage() {
         router.push(`/sukses?mode=izin&nama=${encodeURIComponent(data.nama)}&tanggal=${data.tanggal}&jenis=${data.jenis}`);
       } catch {
         setLoading(false);
-        setError('Gagal mengirim, coba lagi.');
+        setError('Gagal menghubungi server. Periksa koneksi internet Anda dan coba lagi.');
       }
     }
   };
 
   return (
-    <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#f4f6f9] flex flex-col justify-between font-sans text-slate-900 selection:bg-[#07162c] selection:text-amber-400">
+      {/* Top Bar Resmi Direktorat Jenderal Imigrasi (Tanpa em-dash) */}
+      <header className="bg-[#07162c] border-b-4 border-amber-400 text-white shadow-sm">
+        <div className="max-w-xl mx-auto px-4 py-3.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <img
+              src="/logo-imigrasi.png"
+              alt="Logo Imigrasi"
+              className="w-11 h-11 object-contain shrink-0"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = 'none';
+              }}
+            />
+            <div className="leading-tight">
+              <p className="text-[10px] font-bold tracking-[0.14em] text-amber-400 uppercase">
+                Kementerian Imigrasi dan Pemasyarakatan
+              </p>
+              <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-white">
+                Direktorat Jenderal Imigrasi Kanwil Sulsel
+              </h1>
+            </div>
+          </div>
+          <span className="hidden sm:inline-block text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded bg-white/10 text-amber-300 border border-amber-400/30 shrink-0">
+            Portal Presensi
+          </span>
+        </div>
+      </header>
+
+      {/* Modal Konfirmasi Peserta Magang Baru */}
       {showConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-xl p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-3">Konfirmasi Nama Baru</h2>
-            <p className="text-gray-600 mb-4">
-              Nama dan kampus <strong>{form.nama} - {form.universitas}</strong> ini belum pernah terdaftar sebelumnya. Apakah kamu anak magang baru? Jika ya, klik Kirim. Jika tidak, mohon periksa kembali data yang diisi.
-            </p>
-            <div className="bg-gray-50 p-3 rounded mb-4 text-sm">
-              <p><strong>Nama:</strong> {form.nama}</p>
-              <p><strong>Kampus:</strong> {form.universitas}</p>
+        <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="bg-[#07162c] px-6 py-4 border-b-2 border-amber-400">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400 block">
+                Verifikasi Data Peserta
+              </span>
+              <h2 className="text-lg font-extrabold text-white mt-0.5">
+                Konfirmasi Peserta Magang Baru
+              </h2>
             </div>
-            <div className="space-y-3 mb-4 text-left">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Tanggal Mulai Magang</label>
-                <input name="tgl_mulai" type="date" required value={form.tgl_mulai} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+
+            <div className="p-6">
+              <p className="text-sm text-slate-600 leading-relaxed mb-4">
+                Data atas nama <strong className="text-slate-900">{form.nama}</strong> dari{' '}
+                <strong className="text-slate-900">{form.universitas}</strong> belum terdaftar di database. Apabila Anda peserta baru, lengkapi periode masa magang Anda di bawah ini:
+              </p>
+
+              <div className="bg-slate-50 border-l-4 border-[#07162c] p-3.5 rounded-r-lg mb-5 text-xs space-y-1 text-slate-700">
+                <div>
+                  <span className="font-semibold text-slate-500 uppercase tracking-wider">Nama: </span>
+                  <span className="font-bold text-slate-900">{form.nama}</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 uppercase tracking-wider">Instansi/Kampus: </span>
+                  <span className="font-bold text-slate-900">{form.universitas}</span>
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Tanggal Selesai Magang</label>
-                <input name="tgl_selesai" type="date" required value={form.tgl_selesai} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-6 text-left">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                    Mulai Magang
+                  </label>
+                  <input
+                    name="tgl_mulai"
+                    type="date"
+                    required
+                    value={form.tgl_mulai}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                    Selesai Magang
+                  </label>
+                  <input
+                    name="tgl_selesai"
+                    type="date"
+                    required
+                    value={form.tgl_selesai}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                  />
+                </div>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setShowConfirm(false)} className="flex-1 py-2 border rounded">Periksa kembali</button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!form.tgl_mulai || !form.tgl_selesai) {
-                    alert('Mohon isi Tanggal Mulai dan Tanggal Selesai magang terlebih dahulu.');
-                    return;
-                  }
-                  if (form.tgl_selesai < form.tgl_mulai) {
-                    alert('Tanggal selesai tidak boleh lebih awal dari tanggal mulai.');
-                    return;
-                  }
-                  setShowConfirm(false);
-                  handleSubmit(null, true);
-                }}
-                className="flex-1 py-2 bg-blue-600 text-white rounded"
-              >
-                Kirim, saya baru
-              </button>
+
+              <div className="flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(false)}
+                  className="flex-1 py-2.5 px-4 border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs uppercase tracking-wider rounded-lg transition-colors"
+                >
+                  Periksa Kembali
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!form.tgl_mulai || !form.tgl_selesai) {
+                      alert('Mohon isi Tanggal Mulai dan Tanggal Selesai magang terlebih dahulu.');
+                      return;
+                    }
+                    if (form.tgl_selesai < form.tgl_mulai) {
+                      alert('Tanggal selesai tidak boleh lebih awal dari tanggal mulai.');
+                      return;
+                    }
+                    setShowConfirm(false);
+                    handleSubmit(null, true);
+                  }}
+                  className="flex-1 py-2.5 px-4 bg-[#07162c] hover:bg-[#0f294a] text-amber-400 font-bold text-xs uppercase tracking-wider rounded-lg shadow-sm transition-colors"
+                >
+                  Konfirmasi & Kirim
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex gap-1 mb-6">
-          <button
-            type="button"
-            onClick={() => setMode('hadir')}
-            className={`flex-1 py-2 rounded-lg font-medium text-sm ${mode === 'hadir' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-          >
-            Hadir
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('pulang')}
-            className={`flex-1 py-2 rounded-lg font-medium text-sm ${mode === 'pulang' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-          >
-            Pulang
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('izin')}
-            className={`flex-1 py-2 rounded-lg font-medium text-sm ${mode === 'izin' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-          >
-            Izin
-          </button>
-        </div>
-
-        {mode === 'hadir' && <h1 className="text-2xl font-semibold text-gray-900 text-center mb-6">Absen Hadir (Pagi)</h1>}
-        {mode === 'pulang' && <h1 className="text-2xl font-semibold text-gray-900 text-center mb-6">Absen Pulang (Sore)</h1>}
-        {mode === 'izin' && <h1 className="text-2xl font-semibold text-gray-900 text-center mb-6">Izin Tidak Hadir</h1>}
-
-        {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>}
-        {statusMsg && <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg text-sm">{statusMsg}</div>}
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nama</label>
-            <input name="nama" type="text" maxLength={80} required value={form.nama} onChange={handleChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base" placeholder="Nama lengkap" disabled={loading} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Universitas</label>
-            <input name="universitas" type="text" maxLength={80} required value={form.universitas} onChange={handleChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base" placeholder="Universitas Hasanuddin" disabled={loading} />
-            <p className="text-xs text-gray-500 mt-1">Tulis nama lengkap kampus, contoh: Universitas Hasanuddin.</p>
+      {/* Kontainer Utama Form Presensi */}
+      <main className="flex-1 flex items-center justify-center p-4 sm:p-6">
+        <div className="w-full max-w-md bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
+          {/* Sub-Header Kartu */}
+          <div className="bg-gradient-to-r from-[#07162c] to-[#132f5c] px-6 py-5 text-white border-b-2 border-amber-400">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-amber-400 block">
+                  Sistem Presensi Digital
+                </span>
+                <h2 className="text-lg font-extrabold tracking-tight text-white mt-0.5">
+                  {mode === 'hadir' && 'Presensi Kehadiran (Pagi)'}
+                  {mode === 'pulang' && 'Presensi Kepulangan (Sore)'}
+                  {mode === 'izin' && 'Formulir Izin / Sakit'}
+                </h2>
+              </div>
+              <div className="text-right">
+                <span className="inline-block px-2.5 py-1 rounded text-[11px] font-bold bg-amber-400 text-slate-950">
+                  {mode === 'hadir' ? 'HADIR' : mode === 'pulang' ? 'PULANG' : 'IZIN'}
+                </span>
+              </div>
+            </div>
           </div>
 
-          {mode === 'hadir' && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Jam Masuk</label>
-                <input name="jam_masuk" type="time" required value={form.jam_masuk} onChange={handleChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base" disabled={loading} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Keterangan</label>
-                <input name="keterangan" type="text" maxLength={100} value={form.keterangan} onChange={handleChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base" placeholder="Opsional" disabled={loading} />
-              </div>
-            </>
-          )}
+          <div className="p-6">
+            {/* Navigasi Segmented Mode */}
+            <div className="grid grid-cols-3 gap-1.5 bg-slate-100 p-1.5 rounded-lg border border-slate-200 mb-6">
+              {(['hadir', 'pulang', 'izin'] as Mode[]).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => {
+                    setMode(item);
+                    setError(null);
+                    setStatusMsg(null);
+                  }}
+                  className={`py-2 rounded-md font-bold text-xs uppercase tracking-wider transition-all ${
+                    mode === item
+                      ? 'bg-[#07162c] text-amber-400 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                  }`}
+                >
+                  {item === 'hadir' ? 'Hadir' : item === 'pulang' ? 'Pulang' : 'Izin'}
+                </button>
+              ))}
+            </div>
 
-          {mode === 'pulang' && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Jam Keluar</label>
-                <input name="jam_keluar" type="time" required value={form.jam_keluar} onChange={handleChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base" disabled={loading} />
+            {/* Notifikasi Error / Status */}
+            {error && (
+              <div className="mb-5 p-3.5 bg-red-50 border-l-4 border-red-600 text-red-800 rounded-r-lg text-xs font-medium leading-relaxed">
+                {error}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Keterangan (Opsional)</label>
-                <input name="keterangan" type="text" maxLength={100} value={form.keterangan} onChange={handleChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base" placeholder="Jika diisi, menimpa keterangan lama" disabled={loading} />
+            )}
+            {statusMsg && (
+              <div className="mb-5 p-3.5 bg-amber-50 border-l-4 border-amber-500 text-amber-900 rounded-r-lg text-xs font-medium leading-relaxed">
+                {statusMsg}
               </div>
-            </>
-          )}
+            )}
 
-          {mode === 'izin' && (
-            <>
+            {/* Formulir Input (Font warna teks diperbaiki jadi gelap dan kontras) */}
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Jenis</label>
-                <select name="jenis" value={form.jenis} onChange={handleChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base" disabled={loading}>
-                  <option value="Sakit">Sakit</option>
-                  <option value="Izin">Izin</option>
-                  <option value="Lainnya">Lainnya</option>
-                </select>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  Nama Lengkap Peserta
+                </label>
+                <input
+                  name="nama"
+                  type="text"
+                  maxLength={80}
+                  required
+                  value={form.nama}
+                  onChange={handleChange}
+                  className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c] transition-colors"
+                  placeholder="Masukkan nama lengkap sesuai identitas"
+                  disabled={loading}
+                />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Keterangan</label>
-                <input name="keterangan" type="text" maxLength={100} value={form.keterangan} onChange={handleChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base" placeholder="Opsional" disabled={loading} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Link surat (Google Drive)</label>
-                <input name="link_surat" type="url" maxLength={300} value={form.link_surat} onChange={handleChange} className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base" placeholder="https://drive.google.com/..." disabled={loading} />
-                <p className="text-xs text-gray-500 mt-1">
-                  Opsional. Unggah surat ke Google Drive kamu, atur akses ke 'Siapa saja yang memiliki link' (Viewer), lalu tempel link-nya di sini.
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  Universitas / Instansi Asal
+                </label>
+                <input
+                  name="universitas"
+                  type="text"
+                  maxLength={80}
+                  required
+                  value={form.universitas}
+                  onChange={handleChange}
+                  className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c] transition-colors"
+                  placeholder="Contoh: Universitas Hasanuddin"
+                  disabled={loading}
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Gunakan nama lengkap perguruan tinggi atau sekolah (tanpa singkatan).
                 </p>
               </div>
-              <p className="text-xs text-gray-500 text-center">Izin hanya untuk hari ini.</p>
-            </>
-          )}
 
-          <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white font-medium rounded-lg text-base disabled:opacity-50">
-            {loading ? 'Mengirim...' : mode === 'hadir' ? 'Kirim Hadir' : mode === 'pulang' ? 'Kirim Pulang' : 'Kirim Izin'}
-          </button>
-        </form>
-        <p className="mt-6 text-center text-xs text-gray-500">Scan QR di ruang kantor untuk mengakses halaman ini.</p>
-      </div>
-    </main>
+              {mode === 'hadir' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Jam Masuk
+                    </label>
+                    <input
+                      name="jam_masuk"
+                      type="time"
+                      required
+                      value={form.jam_masuk}
+                      onChange={handleChange}
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm font-semibold focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Keterangan / Catatan <span className="text-slate-400 font-normal normal-case">(Opsional)</span>
+                    </label>
+                    <input
+                      name="keterangan"
+                      type="text"
+                      maxLength={100}
+                      value={form.keterangan}
+                      onChange={handleChange}
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                      placeholder="Contoh: Penugasan di Divisi Keimigrasian"
+                      disabled={loading}
+                    />
+                  </div>
+                </>
+              )}
+
+              {mode === 'pulang' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Jam Keluar
+                    </label>
+                    <input
+                      name="jam_keluar"
+                      type="time"
+                      required
+                      value={form.jam_keluar}
+                      onChange={handleChange}
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm font-semibold focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Keterangan Tambahan <span className="text-slate-400 font-normal normal-case">(Opsional)</span>
+                    </label>
+                    <input
+                      name="keterangan"
+                      type="text"
+                      maxLength={100}
+                      value={form.keterangan}
+                      onChange={handleChange}
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                      placeholder="Jika diisi, akan memperbarui catatan pagi"
+                      disabled={loading}
+                    />
+                  </div>
+                </>
+              )}
+
+              {mode === 'izin' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Kategori Ketidakhadiran
+                    </label>
+                    <select
+                      name="jenis"
+                      value={form.jenis}
+                      onChange={handleChange}
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm font-medium focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                      disabled={loading}
+                    >
+                      <option value="Sakit">Sakit</option>
+                      <option value="Izin">Izin Keperluan Akademik / Pribadi</option>
+                      <option value="Lainnya">Lainnya</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Alasan / Keterangan Detail
+                    </label>
+                    <input
+                      name="keterangan"
+                      type="text"
+                      maxLength={100}
+                      value={form.keterangan}
+                      onChange={handleChange}
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                      placeholder="Jelaskan alasan izin secara singkat"
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                      Tautan Surat Bukti (Google Drive)
+                    </label>
+                    <input
+                      name="link_surat"
+                      type="url"
+                      maxLength={300}
+                      value={form.link_surat}
+                      onChange={handleChange}
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                      placeholder="https://drive.google.com/..."
+                      disabled={loading}
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1 leading-normal">
+                      Pastikan akses tautan Google Drive diatur ke <strong>&quot;Siapa saja yang memiliki link&quot; (Viewer)</strong>.
+                    </p>
+                  </div>
+                </>
+              )}
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 px-4 bg-[#07162c] hover:bg-[#0f294a] active:bg-[#051020] text-amber-400 font-extrabold text-xs uppercase tracking-widest rounded-lg shadow-sm border border-amber-400/30 transition-colors disabled:opacity-50"
+                >
+                  {loading
+                    ? 'Memproses Data Presensi...'
+                    : mode === 'hadir'
+                    ? 'Kirim Presensi Hadir'
+                    : mode === 'pulang'
+                    ? 'Kirim Presensi Pulang'
+                    : 'Kirim Laporan Izin'}
+                </button>
+              </div>
+            </form>
+
+            <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+              <span>Verifikasi Koordinat GPS Aktif</span>
+              <span className="font-semibold text-slate-700">Kanwil Sulsel</span>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Footer Resmi (Tanpa em-dash) */}
+      <footer className="bg-[#07162c] text-slate-400 py-3.5 text-center text-[11px] border-t border-slate-800">
+        <div className="max-w-xl mx-auto px-4">
+          Direktorat Jenderal Imigrasi Kantor Wilayah Sulawesi Selatan © 2026
+        </div>
+      </footer>
+    </div>
   );
 }
