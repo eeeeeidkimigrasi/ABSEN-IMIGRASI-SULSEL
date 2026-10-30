@@ -167,3 +167,37 @@ async function handleIzin(params: URLSearchParams) {
 
   return NextResponse.json(data || []);
 }
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { nama, universitas, tgl_mulai, tgl_selesai } = body;
+
+    if (!nama || !universitas || !tgl_mulai || !tgl_selesai || tgl_selesai < tgl_mulai) {
+      return NextResponse.json({ ok: false, error: 'Tanggal mulai dan selesai wajib diisi dengan benar.' }, { status: 400 });
+    }
+
+    const nama_key = nama.trim().toLowerCase();
+    const univ_key = universitas.trim().toLowerCase();
+
+    const { error: errAbsen } = await supabase
+      .from('absensi')
+      .update({ tgl_mulai, tgl_selesai })
+      .eq('nama_key', nama_key)
+      .eq('univ_key', univ_key);
+
+    await supabase
+      .from('izin')
+      .update({ tgl_mulai, tgl_selesai })
+      .eq('nama_key', nama_key)
+      .eq('univ_key', univ_key);
+
+    if (errAbsen) {
+      return NextResponse.json({ ok: false, error: errAbsen.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: e?.message || 'Gagal menyimpan periode.' }, { status: 500 });
+  }
+}
