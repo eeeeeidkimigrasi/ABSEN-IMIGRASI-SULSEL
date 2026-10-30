@@ -92,8 +92,22 @@ async function handleRekap(params: URLSearchParams) {
   const { data } = await query;
   if (!data) return NextResponse.json([]);
 
+  const { data: izinData } = await supabase
+    .from('izin')
+    .select('nama_key, univ_key, tgl_mulai, tgl_selesai');
+
+  const izinCountMap = new Map<string, { count: number; tgl_mulai: string | null; tgl_selesai: string | null }>();
+  for (const iz of (izinData || []) as any[]) {
+    const k = `${iz.nama_key}|${iz.univ_key}`;
+    const cur = izinCountMap.get(k) || { count: 0, tgl_mulai: null, tgl_selesai: null };
+    cur.count++;
+    if (iz.tgl_mulai && !cur.tgl_mulai) cur.tgl_mulai = iz.tgl_mulai;
+    if (iz.tgl_selesai && !cur.tgl_selesai) cur.tgl_selesai = iz.tgl_selesai;
+    izinCountMap.set(k, cur);
+  }
+
   // Aggregate by person
-  const rekapMap = new Map<string, { nama: string; universitas: string; count: number; terakhir: string; tgl_mulai: string | null; tgl_selesai: string | null }>();
+  const rekapMap = new Map<string, { nama: string; universitas: string; count: number; izinCount: number; terakhir: string; tgl_mulai: string | null; tgl_selesai: string | null }>();
   
   const now = new Date();
   const threshold = new Date();
@@ -101,13 +115,15 @@ async function handleRekap(params: URLSearchParams) {
 
   for (const row of data as any[]) {
     const key = `${row.nama_key}|${row.univ_key}`;
+    const izInfo = izinCountMap.get(key);
     const entry = rekapMap.get(key) || {
       nama: row.nama,
       universitas: row.universitas,
       count: 0,
+      izinCount: izInfo?.count || 0,
       terakhir: row.tanggal,
-      tgl_mulai: row.tgl_mulai || null,
-      tgl_selesai: row.tgl_selesai || null,
+      tgl_mulai: row.tgl_mulai || izInfo?.tgl_mulai || null,
+      tgl_selesai: row.tgl_selesai || izInfo?.tgl_selesai || null,
     };
     entry.count++;
     if (row.tanggal > entry.terakhir) entry.terakhir = row.tanggal;
