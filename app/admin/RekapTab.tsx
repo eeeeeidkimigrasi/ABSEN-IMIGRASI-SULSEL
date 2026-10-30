@@ -186,31 +186,31 @@ export function RekapTab() {
     ctx.font = '16px sans-serif';
     ctx.fillText(item.universitas, 42, 114);
 
-    // 3. Logo & Teks Instansi Imigrasi di Kanan Atas
+    // 3. Logo & Teks Instansi Imigrasi di Kanan Atas (Diperbesar)
     ctx.save();
     ctx.textAlign = 'right';
     ctx.fillStyle = '#fbbf24';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.fillText('DIREKTORAT JENDERAL IMIGRASI', 735, 66);
-    ctx.fillStyle = '#e2e8f0';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillText('KANWIL SULAWESI SELATAN', 735, 86);
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '11px sans-serif';
-    ctx.fillText('Sistem Absensi Peserta Magang', 735, 104);
+    ctx.fillText('DIREKTORAT JENDERAL IMIGRASI', 722, 62);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 15px sans-serif';
+    ctx.fillText('KANWIL SULAWESI SELATAN', 722, 85);
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('Sistem Absensi Peserta Magang', 722, 106);
     ctx.restore();
 
-    // Coba muat /logo-imigrasi.png jika ada, jika tidak gambar Emblem Resmi
+    // Muat /logo-imigrasi.png dengan ukuran lebih besar (84x84) tanpa border bulat
     const drawLogo = () =>
       new Promise<void>((resolve) => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
-          ctx.drawImage(img, 752, 38, 68, 68);
+          ctx.drawImage(img, 736, 32, 84, 84);
           resolve();
         };
         img.onerror = () => {
-          drawFallbackEmblem(ctx, 786, 74, 34);
+          drawFallbackEmblem(ctx, 778, 74, 38);
           resolve();
         };
         img.src = '/logo-imigrasi.png';
@@ -476,43 +476,27 @@ export function RekapTab() {
             <div className="bg-slate-50 rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-slate-300">
               {/* Header Banner Tema Imigrasi (Deep Navy + Gold) */}
               <div className="bg-gradient-to-r from-[#07162c] via-[#0f294a] to-[#1e3a8a] p-6 text-white relative border-b-4 border-amber-400">
-                <div className="flex items-start justify-between gap-4">
-                  {/* Kiri: Avatar & Identitas Mahasiswa */}
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="w-16 h-16 rounded-full bg-amber-400/15 flex items-center justify-center text-2xl font-bold text-amber-300 border-2 border-amber-400/70 shrink-0 shadow-md">
-                      {getInitials(profileItem.nama)}
-                    </div>
-                    <div className="min-w-0">
-                      <span className="inline-block px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-amber-400/20 text-amber-300 border border-amber-400/40 rounded-full mb-1">
-                        Kartu Profil Peserta Magang
-                      </span>
-                      <h3 className="text-xl font-extrabold truncate text-white">{profileItem.nama}</h3>
-                      <p className="text-slate-200 text-sm truncate">{profileItem.universitas}</p>
-                    </div>
+                <div className="flex items-center justify-between gap-4">
+                  {/* Kiri: Identitas Mahasiswa (Tanpa Lingkaran UK) */}
+                  <div className="min-w-0">
+                    <span className="inline-block px-3 py-0.5 text-[11px] font-bold uppercase tracking-widest bg-amber-400/20 text-amber-300 border border-amber-400/40 rounded-full mb-1.5">
+                      Kartu Profil Peserta Magang
+                    </span>
+                    <h3 className="text-2xl font-extrabold truncate text-white">{profileItem.nama}</h3>
+                    <p className="text-slate-200 text-base truncate mt-0.5">{profileItem.universitas}</p>
                   </div>
 
-                  {/* Kanan Atas: Logo & Identitas Imigrasi */}
-                  <div className="flex items-center gap-2.5 shrink-0 text-right">
-                    <div className="hidden sm:block">
-                      <div className="text-[10px] font-bold tracking-wider text-amber-400 uppercase">Ditjen Imigrasi</div>
-                      <div className="text-[11px] font-semibold text-slate-200">Kanwil Sulsel</div>
+                  {/* Kanan Atas: Logo Langsung Tanpa Border Bulat & Teks Diperbesar */}
+                  <div className="flex items-center gap-3.5 shrink-0 text-right">
+                    <div className="hidden sm:block leading-snug">
+                      <div className="text-xs font-extrabold tracking-wider text-amber-400 uppercase">DITJEN IMIGRASI</div>
+                      <div className="text-sm font-bold text-white">Kanwil Sulsel</div>
                     </div>
-                    <div className="w-12 h-12 rounded-full bg-[#0b1f3a] border-2 border-amber-400 flex items-center justify-center shadow-md overflow-hidden relative">
-                      <img
-                        src="/logo-imigrasi.png"
-                        alt="Logo Imigrasi"
-                        className="w-9 h-9 object-contain"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).style.display = 'none';
-                          const next = e.currentTarget.nextElementSibling as HTMLElement;
-                          if (next) next.style.display = 'flex';
-                        }}
-                      />
-                      <div style={{ display: 'none' }} className="flex-col items-center justify-center text-amber-400 leading-none">
-                        <span className="text-sm font-bold">★</span>
-                        <span className="text-[7px] font-extrabold tracking-tighter text-white mt-0.5">IMIGRASI</span>
-                      </div>
-                    </div>
+                    <img
+                      src="/logo-imigrasi.png"
+                      alt="Logo Imigrasi"
+                      className="w-16 h-16 object-contain drop-shadow-md"
+                    />
                   </div>
                 </div>
               </div>
@@ -588,18 +572,24 @@ export function RekapTab() {
                 >
                   Tutup
                 </button>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={`/api/admin/export?tipe=individu&nama=${encodeURIComponent(profileItem.nama)}&univ=${encodeURIComponent(profileItem.universitas)}`}
+                    className="px-3.5 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-semibold shadow-sm flex items-center"
+                  >
+                    Unduh CSV
+                  </a>
                   <button
                     type="button"
                     onClick={() => window.print()}
-                    className="px-4 py-2 text-sm bg-slate-800 text-white rounded-lg hover:bg-slate-900 font-semibold"
+                    className="px-3.5 py-2 text-sm bg-slate-800 text-white rounded-lg hover:bg-slate-900 font-semibold"
                   >
                     Cetak / PDF
                   </button>
                   <button
                     type="button"
                     onClick={() => downloadProfilePng(profileItem)}
-                    className="px-4 py-2 text-sm bg-[#0b1f3a] text-amber-300 border border-amber-400/50 rounded-lg hover:bg-[#153460] font-semibold shadow-sm"
+                    className="px-3.5 py-2 text-sm bg-[#0b1f3a] text-amber-300 border border-amber-400/50 rounded-lg hover:bg-[#153460] font-semibold shadow-sm"
                   >
                     Unduh PNG
                   </button>
