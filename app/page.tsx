@@ -151,9 +151,9 @@ export default function AbsenPage() {
 
         setForm((f) => ({ ...f, keterangan: '' }));
         if (mode === 'hadir') {
-          router.push(`/sukses?mode=hadir&nama=${encodeURIComponent(data.nama)}&tanggal=${data.tanggal}&jam_masuk=${data.jam_masuk}`);
+          router.push(`/sukses?mode=hadir&nama=${encodeURIComponent(data.nama)}&univ=${encodeURIComponent(form.universitas)}&tanggal=${data.tanggal}&jam_masuk=${data.jam_masuk}`);
         } else {
-          router.push(`/sukses?mode=pulang&nama=${encodeURIComponent(data.nama)}&tanggal=${data.tanggal}&jam_keluar=${data.jam_keluar}`);
+          router.push(`/sukses?mode=pulang&nama=${encodeURIComponent(data.nama)}&univ=${encodeURIComponent(form.universitas)}&tanggal=${data.tanggal}&jam_keluar=${data.jam_keluar}`);
         }
       } catch {
         setLoading(false);
@@ -204,7 +204,7 @@ export default function AbsenPage() {
         } catch {}
 
         setForm((f) => ({ ...f, keterangan: '', link_surat: '' }));
-        router.push(`/sukses?mode=izin&nama=${encodeURIComponent(data.nama)}&tanggal=${data.tanggal}&jenis=${data.jenis}`);
+        router.push(`/sukses?mode=izin&nama=${encodeURIComponent(data.nama)}&univ=${encodeURIComponent(form.universitas)}&tanggal=${data.tanggal}&jenis=${data.jenis}`);
       } catch {
         setLoading(false);
         setError('Gagal menghubungi server. Periksa koneksi internet Anda dan coba lagi.');
