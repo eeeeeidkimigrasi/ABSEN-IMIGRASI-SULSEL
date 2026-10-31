@@ -114,7 +114,7 @@ export function RiwayatTab() {
 
       if (d.sheets_ok === false) {
         setSheetsWarn(
-          'Data tersimpan di database, tetapi gagal disinkronkan ke Google Sheets. Silakan cek tab Log.'
+          'Data tersimpan di database, tetapi gagal disinkronkan ke Google Sheets. Silakan cek tab Log Aktivitas.'
         );
       }
 
@@ -152,7 +152,7 @@ export function RiwayatTab() {
 
       if (d.sheets_ok === false) {
         setSheetsWarn(
-          'Data dihapus di database, tetapi gagal dihapus di Google Sheets. Silakan cek tab Log.'
+          'Data dihapus di database, tetapi gagal dihapus di Google Sheets. Silakan cek tab Log Aktivitas.'
         );
       }
 
@@ -163,60 +163,81 @@ export function RiwayatTab() {
   };
 
   return (
-    <div>
+    <div className="space-y-6">
       {sheetsWarn && (
-        <div className="bg-yellow-50 text-yellow-800 p-4 rounded-lg mb-4 flex justify-between items-center text-sm border border-yellow-300">
+        <div className="bg-amber-50 text-amber-900 p-4 rounded-lg flex justify-between items-center text-xs font-medium border-l-4 border-amber-500">
           <span>{sheetsWarn}</span>
           <button
             type="button"
             onClick={() => setSheetsWarn(null)}
-            className="ml-4 font-bold text-yellow-900 hover:text-yellow-700"
+            className="ml-4 px-2 py-1 font-bold text-amber-900 hover:bg-amber-100 rounded"
           >
-            ✕
+            Tutup
           </button>
         </div>
       )}
 
-      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <input
-            name="start"
-            type="date"
-            className="px-4 py-2 border rounded-lg text-sm"
-            value={filters.start}
-            onChange={handleFilter}
-          />
-          <input
-            name="end"
-            type="date"
-            className="px-4 py-2 border rounded-lg text-sm"
-            value={filters.end}
-            onChange={handleFilter}
-          />
-          <input
-            name="univ"
-            type="text"
-            className="px-4 py-2 border rounded-lg text-sm"
-            value={filters.univ}
-            onChange={handleFilter}
-            placeholder="Universitas"
-          />
-          <input
-            name="q"
-            type="text"
-            className="px-4 py-2 border rounded-lg text-sm"
-            value={filters.q}
-            onChange={handleFilter}
-            placeholder="Nama..."
-          />
+      {/* Bilah Filter & Tombol Aksi */}
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-wrap justify-between items-end gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-1 min-w-[260px]">
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              Dari Tanggal
+            </label>
+            <input
+              name="start"
+              type="date"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm text-slate-900 focus:outline-none focus:border-[#043666]"
+              value={filters.start}
+              onChange={handleFilter}
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              Sampai Tanggal
+            </label>
+            <input
+              name="end"
+              type="date"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm text-slate-900 focus:outline-none focus:border-[#043666]"
+              value={filters.end}
+              onChange={handleFilter}
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              Filter Universitas
+            </label>
+            <input
+              name="univ"
+              type="text"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#043666]"
+              value={filters.univ}
+              onChange={handleFilter}
+              placeholder="Contoh: Hasanuddin"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+              Cari Nama Peserta
+            </label>
+            <input
+              name="q"
+              type="text"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#043666]"
+              value={filters.q}
+              onChange={handleFilter}
+              placeholder="Ketik nama..."
+            />
+          </div>
         </div>
-        <div className="flex gap-2 ml-auto">
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={openTambah}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+            className="px-4 py-2 bg-[#043666] hover:bg-[#04315C] text-[#E9C170] font-bold text-xs uppercase tracking-wider rounded-md shadow-sm transition-colors"
           >
-            + Tambah Absensi
+            + Tambah Presensi
           </button>
           <a
             href={`/api/admin/export?tipe=riwayat&${new URLSearchParams({
@@ -226,195 +247,240 @@ export function RiwayatTab() {
               q: filters.q,
               page: '1',
             }).toString()}`}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm text-center hover:bg-green-700"
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs uppercase tracking-wider rounded-md shadow-sm transition-colors"
           >
             Ekspor CSV
           </a>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-x-auto mb-4">
-        <table className="w-full text-sm text-left">
-          <thead className="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
-            <tr>
-              <th className="px-4 py-3">Tanggal</th>
-              <th className="px-4 py-3">Nama</th>
-              <th className="px-4 py-3">Universitas</th>
-              <th className="px-4 py-3">Masuk</th>
-              <th className="px-4 py-3">Keluar</th>
-              <th className="px-4 py-3">Keterangan</th>
-              <th className="px-4 py-3 text-right">Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {loading ? (
+      {/* Tabel Riwayat Kehadiran */}
+      <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+        <div className="bg-[#043666] px-5 py-3.5 border-b-2 border-[#E9C170] flex items-center justify-between">
+          <h2 className="text-xs font-extrabold uppercase tracking-wider text-white">
+            Data Riwayat Kehadiran Peserta
+          </h2>
+          <span className="px-2.5 py-0.5 text-[11px] font-extrabold rounded bg-[#E9C170] text-[#04315C]">
+            Total {total} Baris
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-slate-50 text-slate-700 uppercase text-[11px] font-extrabold tracking-wider border-b border-slate-200">
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
-                  Memuat...
-                </td>
+                <th className="px-5 py-3.5">Tanggal</th>
+                <th className="px-5 py-3.5">Nama Peserta</th>
+                <th className="px-5 py-3.5">Universitas / Instansi</th>
+                <th className="px-5 py-3.5">Jam Masuk</th>
+                <th className="px-5 py-3.5">Jam Keluar</th>
+                <th className="px-5 py-3.5">Keterangan</th>
+                <th className="px-5 py-3.5 text-right">Tindakan</th>
               </tr>
-            ) : (
-              data.map((r, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 whitespace-nowrap">{r.tanggal}</td>
-                  <td className="px-4 py-3 font-medium">{r.nama}</td>
-                  <td className="px-4 py-3">{r.universitas}</td>
-                  <td className="px-4 py-3">{r.jam_masuk}</td>
-                  <td className="px-4 py-3">{r.jam_keluar || '-'}</td>
-                  <td className="px-4 py-3 text-gray-500">{r.keterangan || '-'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-right space-x-2">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(r)}
-                      className="text-blue-600 hover:underline font-medium"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(r)}
-                      className="text-red-600 hover:underline font-medium"
-                    >
-                      Hapus
-                    </button>
+            </thead>
+            <tbody className="divide-y divide-slate-200 text-slate-800">
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-5 py-10 text-center text-xs font-bold uppercase tracking-widest text-[#043666]">
+                    Memuat Riwayat Kehadiran...
                   </td>
                 </tr>
-              ))
-            )}
-            {!loading && data.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
-                  Tidak ada data
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              ) : (
+                data.map((r, i) => (
+                  <tr key={i} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-slate-700">{r.tanggal}</td>
+                    <td className="px-5 py-3.5 font-bold text-slate-900">{r.nama}</td>
+                    <td className="px-5 py-3.5 text-slate-700">{r.universitas}</td>
+                    <td className="px-5 py-3.5">
+                      <span className="inline-block px-2.5 py-0.5 text-xs font-bold rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        {String(r.jam_masuk || '').slice(0, 5)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {r.jam_keluar ? (
+                        <span className="inline-block px-2.5 py-0.5 text-xs font-bold rounded bg-slate-100 text-slate-800 border border-slate-300">
+                          {String(r.jam_keluar).slice(0, 5)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-600">{r.keterangan || '-'}</td>
+                    <td className="px-5 py-3.5 whitespace-nowrap text-right space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(r)}
+                        className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-[#043666] border border-slate-300 rounded hover:bg-[#043666] hover:text-white transition-colors"
+                      >
+                        Ubah
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(r)}
+                        className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200 rounded hover:bg-red-700 hover:text-white transition-colors"
+                      >
+                        Hapus
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+              {!loading && data.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-5 py-10 text-center text-xs font-medium text-slate-400">
+                    Tidak ada data riwayat kehadiran yang sesuai dengan filter.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div className="flex justify-between items-center text-sm text-gray-500">
-        <div>Total: {total} baris</div>
-        <div className="flex gap-2">
+      {/* Navigasi Halaman (Pagination) */}
+      <div className="flex justify-between items-center text-xs font-bold text-slate-600 pt-1">
+        <div>Menampilkan {data.length} dari total {total} baris</div>
+        <div className="flex items-center gap-2">
           <button
             type="button"
             disabled={filters.page === 1}
             onClick={() => setFilters((f) => ({ ...f, page: f.page - 1 }))}
-            className="px-3 py-1 border rounded disabled:opacity-30"
+            className="px-3 py-1.5 bg-white border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-40 uppercase tracking-wider"
           >
-            Sblmnya
+            Sebelumnya
           </button>
-          <span className="py-1">Hal {filters.page}</span>
+          <span className="px-3 py-1.5 bg-[#043666] text-[#E9C170] rounded-md">
+            Halaman {filters.page}
+          </span>
           <button
             type="button"
             disabled={data.length < 50}
             onClick={() => setFilters((f) => ({ ...f, page: f.page + 1 }))}
-            className="px-3 py-1 border rounded disabled:opacity-30"
+            className="px-3 py-1.5 bg-white border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-40 uppercase tracking-wider"
           >
-            Brktnya
+            Berikutnya
           </button>
         </div>
       </div>
 
+      {/* Modal Tambah / Edit Presensi */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-4">
-              {mode === 'tambah' ? 'Tambah Absensi' : 'Edit Absensi'}
-            </h2>
+        <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
+            <div className="bg-[#043666] px-6 py-4 border-b-2 border-[#E9C170]">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#E9C170] block">
+                Manajemen Data Presensi
+              </span>
+              <h2 className="text-base font-extrabold text-white mt-0.5">
+                {mode === 'tambah' ? 'Tambah Data Presensi Baru' : 'Ubah Data Presensi Peserta'}
+              </h2>
+            </div>
 
-            {formError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-                {formError}
-              </div>
-            )}
+            <div className="p-6">
+              {formError && (
+                <div className="mb-4 p-3 bg-red-50 border-l-4 border-red-600 text-red-800 rounded-r text-xs font-medium">
+                  {formError}
+                </div>
+              )}
 
-            <form onSubmit={handleSubmit} className="space-y-3 text-sm">
-              <div>
-                <label className="block font-medium text-gray-700 mb-1">Nama</label>
-                <input
-                  type="text"
-                  required
-                  value={form.nama}
-                  onChange={(e) => setForm({ ...form, nama: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-gray-700 mb-1">Universitas</label>
-                <input
-                  type="text"
-                  required
-                  value={form.universitas}
-                  onChange={(e) => setForm({ ...form, universitas: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-gray-700 mb-1">Tanggal</label>
-                <input
-                  type="date"
-                  required
-                  max={todayStr}
-                  value={form.tanggal}
-                  onChange={(e) => setForm({ ...form, tanggal: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+              <form onSubmit={handleSubmit} className="space-y-4 text-sm">
                 <div>
-                  <label className="block font-medium text-gray-700 mb-1">Jam Masuk</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    Nama Lengkap Peserta
+                  </label>
                   <input
-                    type="time"
+                    type="text"
                     required
-                    value={form.jam_masuk}
-                    onChange={(e) => setForm({ ...form, jam_masuk: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    value={form.nama}
+                    onChange={(e) => setForm({ ...form, nama: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-[#043666]"
                   />
                 </div>
+
                 <div>
-                  <label className="block font-medium text-gray-700 mb-1">Jam Keluar</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    Universitas / Instansi
+                  </label>
                   <input
-                    type="time" value={form.jam_keluar}
-                    onChange={(e) => setForm({ ...form, jam_keluar: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    type="text"
+                    required
+                    value={form.universitas}
+                    onChange={(e) => setForm({ ...form, universitas: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-[#043666]"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block font-medium text-gray-700 mb-1">
-                  Keterangan (opsional, maks 100)
-                </label>
-                <input
-                  type="text"
-                  maxLength={100}
-                  value={form.keterangan}
-                  onChange={(e) => setForm({ ...form, keterangan: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    Tanggal Presensi
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    max={todayStr}
+                    value={form.tanggal}
+                    onChange={(e) => setForm({ ...form, tanggal: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-[#043666]"
+                  />
+                </div>
 
-              <div className="flex justify-end gap-2 pt-3">
-                <button
-                  type="button"
-                  disabled={submitting}
-                  onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {submitting ? 'Menyimpan...' : 'Simpan'}
-                </button>
-              </div>
-            </form>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                      Jam Masuk
+                    </label>
+                    <input
+                      type="time"
+                      required
+                      value={form.jam_masuk}
+                      onChange={(e) => setForm({ ...form, jam_masuk: e.target.value })}
+                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-[#043666]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                      Jam Keluar
+                    </label>
+                    <input
+                      type="time"
+                      value={form.jam_keluar}
+                      onChange={(e) => setForm({ ...form, jam_keluar: e.target.value })}
+                      className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-[#043666]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    Keterangan (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={form.keterangan}
+                    onChange={(e) => setForm({ ...form, keterangan: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-[#043666]"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2.5 pt-3">
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => setModalOpen(false)}
+                    className="px-4 py-2 text-xs font-bold uppercase tracking-wider border border-slate-300 rounded-md text-slate-700 hover:bg-slate-100"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-4 py-2 text-xs font-bold uppercase tracking-wider bg-[#043666] hover:bg-[#04315C] text-[#E9C170] rounded-md disabled:opacity-50"
+                  >
+                    {submitting ? 'Menyimpan...' : 'Simpan Data'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
