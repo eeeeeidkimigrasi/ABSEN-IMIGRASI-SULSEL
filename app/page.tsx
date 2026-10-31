@@ -213,9 +213,9 @@ export default function AbsenPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4f6f9] flex flex-col justify-between font-sans text-slate-900 selection:bg-[#07162c] selection:text-amber-400">
-      {/* Top Bar Resmi Direktorat Jenderal Imigrasi (Tanpa em-dash) */}
-      <header className="bg-[#07162c] border-b-4 border-amber-400 text-white shadow-sm">
+    <div className="min-h-screen bg-[#F4F6F8] flex flex-col justify-between font-sans text-slate-900 selection:bg-[#043666] selection:text-[#E9C170]">
+      {/* Top Bar Resmi dengan Palet Wisdom Blue (#043666) & Dignity Gold (#E9C170) */}
+      <header className="bg-[#043666] border-b-4 border-[#E9C170] text-white shadow-sm">
         <div className="max-w-xl mx-auto px-4 py-3.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <img
@@ -227,15 +227,15 @@ export default function AbsenPage() {
               }}
             />
             <div className="leading-tight">
-              <p className="text-[10px] font-bold tracking-[0.14em] text-amber-400 uppercase">
+              <p className="text-[10px] font-bold tracking-[0.14em] text-[#E9C170] uppercase">
                 Kementerian Imigrasi dan Pemasyarakatan
               </p>
-              <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-white">
+              <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-white mt-0.5">
                 Direktorat Jenderal Imigrasi Kanwil Sulsel
               </h1>
             </div>
           </div>
-          <span className="hidden sm:inline-block text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded bg-white/10 text-amber-300 border border-amber-400/30 shrink-0">
+          <span className="hidden sm:inline-block text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded bg-[#04315C] text-[#E9C170] border border-[#BD944D]/50 shrink-0">
             Portal Presensi
           </span>
         </div>
@@ -245,8 +245,8 @@ export default function AbsenPage() {
       {showConfirm && (
         <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center z-50 p-4">
           <div className="w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="bg-[#07162c] px-6 py-4 border-b-2 border-amber-400">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400 block">
+            <div className="bg-[#043666] px-6 py-4 border-b-2 border-[#E9C170]">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#E9C170] block">
                 Verifikasi Data Peserta
               </span>
               <h2 className="text-lg font-extrabold text-white mt-0.5">
@@ -260,7 +260,7 @@ export default function AbsenPage() {
                 <strong className="text-slate-900">{form.universitas}</strong> belum terdaftar di database. Apabila Anda peserta baru, lengkapi periode masa magang Anda di bawah ini:
               </p>
 
-              <div className="bg-slate-50 border-l-4 border-[#07162c] p-3.5 rounded-r-lg mb-5 text-xs space-y-1 text-slate-700">
+              <div className="bg-slate-50 border-l-4 border-[#043666] p-3.5 rounded-r-lg mb-5 text-xs space-y-1 text-slate-700">
                 <div>
                   <span className="font-semibold text-slate-500 uppercase tracking-wider">Nama: </span>
                   <span className="font-bold text-slate-900">{form.nama}</span>
@@ -282,7 +282,7 @@ export default function AbsenPage() {
                     required
                     value={form.tgl_mulai}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm text-slate-900 focus:outline-none focus:border-[#043666] focus:ring-1 focus:ring-[#043666]"
                   />
                 </div>
                 <div>
@@ -295,7 +295,7 @@ export default function AbsenPage() {
                     required
                     value={form.tgl_selesai}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm text-slate-900 focus:outline-none focus:border-[#043666] focus:ring-1 focus:ring-[#043666]"
                   />
                 </div>
               </div>
@@ -304,7 +304,7 @@ export default function AbsenPage() {
                 <button
                   type="button"
                   onClick={() => setShowConfirm(false)}
-                  className="flex-1 py-2.5 px-4 border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs uppercase tracking-wider rounded-lg transition-colors"
+                  className="flex-1 py-2.5 px-4 border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs uppercase tracking-wider rounded-md transition-colors"
                 >
                   Periksa Kembali
                 </button>
@@ -322,7 +322,7 @@ export default function AbsenPage() {
                     setShowConfirm(false);
                     handleSubmit(null, true);
                   }}
-                  className="flex-1 py-2.5 px-4 bg-[#07162c] hover:bg-[#0f294a] text-amber-400 font-bold text-xs uppercase tracking-wider rounded-lg shadow-sm transition-colors"
+                  className="flex-1 py-2.5 px-4 bg-[#043666] hover:bg-[#04315C] text-[#E9C170] font-extrabold text-xs uppercase tracking-wider rounded-md shadow-sm transition-colors"
                 >
                   Konfirmasi & Kirim
                 </button>
@@ -334,12 +334,12 @@ export default function AbsenPage() {
 
       {/* Kontainer Utama Form Presensi */}
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6">
-        <div className="w-full max-w-md bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
-          {/* Sub-Header Kartu */}
-          <div className="bg-gradient-to-r from-[#07162c] to-[#132f5c] px-6 py-5 text-white border-b-2 border-amber-400">
+        <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          {/* Sub-Header Kartu dengan Wisdom Blue (#043666) Solid & Dignity Gold (#E9C170) */}
+          <div className="bg-[#043666] px-6 py-5 text-white border-b-2 border-[#E9C170]">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-amber-400 block">
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#E9C170] block">
                   Sistem Presensi Digital
                 </span>
                 <h2 className="text-lg font-extrabold tracking-tight text-white mt-0.5">
@@ -349,7 +349,7 @@ export default function AbsenPage() {
                 </h2>
               </div>
               <div className="text-right">
-                <span className="inline-block px-2.5 py-1 rounded text-[11px] font-bold bg-amber-400 text-slate-950">
+                <span className="inline-block px-2.5 py-1 rounded text-[11px] font-extrabold bg-[#E9C170] text-[#04315C]">
                   {mode === 'hadir' ? 'HADIR' : mode === 'pulang' ? 'PULANG' : 'IZIN'}
                 </span>
               </div>
@@ -368,10 +368,10 @@ export default function AbsenPage() {
                     setError(null);
                     setStatusMsg(null);
                   }}
-                  className={`py-2 rounded-md font-bold text-xs uppercase tracking-wider transition-all ${
+                  className={`py-2 rounded-md font-extrabold text-xs uppercase tracking-wider transition-all ${
                     mode === item
-                      ? 'bg-[#07162c] text-amber-400 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                      ? 'bg-[#043666] text-[#E9C170] shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
                   }`}
                 >
                   {item === 'hadir' ? 'Hadir' : item === 'pulang' ? 'Pulang' : 'Izin'}
@@ -381,17 +381,17 @@ export default function AbsenPage() {
 
             {/* Notifikasi Error / Status */}
             {error && (
-              <div className="mb-5 p-3.5 bg-red-50 border-l-4 border-red-600 text-red-800 rounded-r-lg text-xs font-medium leading-relaxed">
+              <div className="mb-5 p-3.5 bg-red-50 border-l-4 border-red-600 text-red-800 rounded-r-md text-xs font-medium leading-relaxed">
                 {error}
               </div>
             )}
             {statusMsg && (
-              <div className="mb-5 p-3.5 bg-amber-50 border-l-4 border-amber-500 text-amber-900 rounded-r-lg text-xs font-medium leading-relaxed">
+              <div className="mb-5 p-3.5 bg-amber-50 border-l-4 border-[#BD944D] text-amber-900 rounded-r-md text-xs font-medium leading-relaxed">
                 {statusMsg}
               </div>
             )}
 
-            {/* Formulir Input (Font warna teks diperbaiki jadi gelap dan kontras) */}
+            {/* Formulir Input */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
@@ -404,7 +404,7 @@ export default function AbsenPage() {
                   required
                   value={form.nama}
                   onChange={handleChange}
-                  className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c] transition-colors"
+                  className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-md text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#043666] focus:ring-1 focus:ring-[#043666] transition-colors"
                   placeholder="Masukkan nama lengkap sesuai identitas"
                   disabled={loading}
                 />
@@ -421,7 +421,7 @@ export default function AbsenPage() {
                   required
                   value={form.universitas}
                   onChange={handleChange}
-                  className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c] transition-colors"
+                  className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-md text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#043666] focus:ring-1 focus:ring-[#043666] transition-colors"
                   placeholder="Contoh: Universitas Hasanuddin"
                   disabled={loading}
                 />
@@ -442,7 +442,7 @@ export default function AbsenPage() {
                       required
                       value={form.jam_masuk}
                       onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm font-semibold focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-md text-sm font-semibold focus:outline-none focus:border-[#043666] focus:ring-1 focus:ring-[#043666]"
                       disabled={loading}
                     />
                   </div>
@@ -456,8 +456,8 @@ export default function AbsenPage() {
                       maxLength={100}
                       value={form.keterangan}
                       onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
-                      placeholder="Contoh: Penugasan di Divisi Keimigrasian"
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-md text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#043666] focus:ring-1 focus:ring-[#043666]"
+                      placeholder=""
                       disabled={loading}
                     />
                   </div>
@@ -476,7 +476,7 @@ export default function AbsenPage() {
                       required
                       value={form.jam_keluar}
                       onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm font-semibold focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-md text-sm font-semibold focus:outline-none focus:border-[#043666] focus:ring-1 focus:ring-[#043666]"
                       disabled={loading}
                     />
                   </div>
@@ -490,7 +490,7 @@ export default function AbsenPage() {
                       maxLength={100}
                       value={form.keterangan}
                       onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-md text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#043666] focus:ring-1 focus:ring-[#043666]"
                       placeholder="Jika diisi, akan memperbarui catatan pagi"
                       disabled={loading}
                     />
@@ -508,7 +508,7 @@ export default function AbsenPage() {
                       name="jenis"
                       value={form.jenis}
                       onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm font-medium focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-md text-sm font-medium focus:outline-none focus:border-[#043666] focus:ring-1 focus:ring-[#043666]"
                       disabled={loading}
                     >
                       <option value="Sakit">Sakit</option>
@@ -526,7 +526,7 @@ export default function AbsenPage() {
                       maxLength={100}
                       value={form.keterangan}
                       onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-md text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#043666] focus:ring-1 focus:ring-[#043666]"
                       placeholder="Jelaskan alasan izin secara singkat"
                       disabled={loading}
                     />
@@ -541,7 +541,7 @@ export default function AbsenPage() {
                       maxLength={300}
                       value={form.link_surat}
                       onChange={handleChange}
-                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#07162c] focus:ring-1 focus:ring-[#07162c]"
+                      className="w-full px-3.5 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-md text-sm placeholder:text-slate-400 focus:outline-none focus:border-[#043666] focus:ring-1 focus:ring-[#043666]"
                       placeholder="https://drive.google.com/..."
                       disabled={loading}
                     />
@@ -556,7 +556,7 @@ export default function AbsenPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 px-4 bg-[#07162c] hover:bg-[#0f294a] active:bg-[#051020] text-amber-400 font-extrabold text-xs uppercase tracking-widest rounded-lg shadow-sm border border-amber-400/30 transition-colors disabled:opacity-50"
+                  className="w-full py-3 px-4 bg-[#043666] hover:bg-[#04315C] active:bg-[#032546] text-[#E9C170] font-extrabold text-xs uppercase tracking-widest rounded-md shadow-sm border border-[#BD944D]/40 transition-colors disabled:opacity-50"
                 >
                   {loading
                     ? 'Memproses Data Presensi...'
@@ -571,14 +571,14 @@ export default function AbsenPage() {
 
             <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
               <span>Verifikasi Koordinat GPS Aktif</span>
-              <span className="font-semibold text-slate-700">Kanwil Sulsel</span>
+              <span className="font-bold text-[#043666]">Kanwil Sulsel</span>
             </div>
           </div>
         </div>
       </main>
 
-      {/* Footer Resmi (Tanpa em-dash) */}
-      <footer className="bg-[#07162c] text-slate-400 py-3.5 text-center text-[11px] border-t border-slate-800">
+      {/* Footer Resmi dengan Shade Wisdom Blue (#04315C) & Border Dignity Gold (#BD944D) */}
+      <footer className="bg-[#04315C] text-slate-300 py-3.5 text-center text-xs border-t-2 border-[#BD944D]">
         <div className="max-w-xl mx-auto px-4">
           Direktorat Jenderal Imigrasi Kantor Wilayah Sulawesi Selatan © 2026
         </div>
