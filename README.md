@@ -1,39 +1,59 @@
 # Absen Mahasiswa Magang Imigrasi Makassar
 
-Web absen untuk mahasiswa magang, diakses lewat QR statis di poster (domain: magang-imigrasi-sulsel.my.id). Satu halaman, dua mode: **Hadir** dan **Izin**.
+Web absen untuk mahasiswa magang di lingkungan Kantor Wilayah Direktorat Jenderal Imigrasi Sulawesi Selatan, diakses lewat QR statis di poster (domain: `magang-imigrasi-sulsel.my.id`). Menggunakan tema resmi instansi (*Wisdom Blue* `#043666` & *Dignity Gold* `#E9C170`).
+
+Terdapat halaman publik peserta dengan tiga mode (**Hadir**, **Pulang**, dan **Izin**) serta halaman **Dashboard Admin (`/admin`)** untuk pengelolaan data, rekapitulasi, dan ekspor laporan.
+
+## Arsitektur Data: Supabase (Utama) vs Google Sheets (Cadangan)
+
+Sistem ini menempatkan **Supabase (PostgreSQL) sebagai Database Utama (*Single Source of Truth*)**, sedangkan **Google Spreadsheet hanya berfungsi sebagai media pencadangan sekunder (*automated backup*)**:
+- Seluruh proses baca/tulis dari form peserta maupun fitur di Dashboard Admin (pantauan hari ini, rekapitulasi, filter riwayat, edit/hapus data, hingga periode magang) mengambil dan memodifikasi data **langsung di Supabase**.
+- **Google Sheets bukan lagi data utama.** Setiap kali ada data masuk atau diubah, server otomatis mencadangkannya ke Google Sheets.
+- Jika sinkronisasi ke Google Sheets gagal (misalnya karena gangguan jaringan ke Google API), data presensi **tetap aman tersimpan di Supabase** dengan penanda `synced_to_sheets = false`. Baris yang tertunda akan disinkronkan ulang secara otomatis oleh Cron harian atau ditandai lewat peringatan di Dashboard Admin.
 
 ## Cara Kerja
 
-### Mode Hadir (`/api/absen`)
-Satu kali absen per hari, saat pulang. Form: nama, universitas, jam masuk (manual), jam keluar (default jam sekarang), keterangan (opsional, maks 100 karakter), dan lokasi dari browser.
+### 1. Mode Hadir & Mode Pulang (`/api/absen`)
+Absen dilakukan saat datang (**Mode Hadir**) dan saat selesai kerja (**Mode Pulang**). Form menyimpan nama dan universitas terakhir di browser (`localStorage`) agar peserta tidak perlu mengetik ulang setiap hari.
 
 Urutan di server:
 1. Rapikan spasi nama, universitas, dan keterangan.
-2. Validasi kelengkapan isian.
-3. Validasi lokasi (Haversine, radius dari `RADIUS_METER`).
-4. Cek sudah absen hari ini. Jika ya, ditolak (panel kuning).
-5. Cek nama baru. Jika kombinasi nama + universitas belum pernah ada di tabel `absensi` maupun `izin`, tampil popup konfirmasi. Peserta klik "Kirim, saya baru" untuk melanjutkan (dikirim ulang dengan `konfirmasi_baru: true`).
-6. Simpan ke Supabase (upsert), lalu tambah baris ke Google Sheets (tab bulanan dan Semua Data).
-7. Jika hari itu ada baris izin untuk orang yang sama, baris izin dihapus di Supabase dan Sheets (hadir selalu menang).
+2. Validasi kelengkapan isian dan kesesuaian jam (jam keluar tidak boleh mendahului jam masuk).
+3. Validasi lokasi menggunakan rumus Haversine sesuai batas `RADIUS_METER` dari titik koordinat kantor.
+4. Cek status presensi hari ini di Supabase:
+   - Pada **Mode Hadir**: Jika sudah tercatat hadir hari ini, sistem menampilkan informasi jam masuk yang sudah tersimpan.
+   - Pada **Mode Pulang**: Jika belum absen hadir pagi hari, ditolak. Jika sudah absen pulang sebelumnya, menampilkan jam keluar yang sudah tercatat.
+5. Cek nama baru. Jika kombinasi `nama + universitas` belum pernah terdaftar di database, muncul popup konfirmasi peserta baru yang meminta input **Tanggal Mulai Magang** dan **Tanggal Selesai Magang** (dikirim ulang dengan `konfirmasi_baru: true`).
+6. Simpan ke **Supabase** (database utama), lalu sinkronkan baris ke **Google Sheets** (cadangan di tab bulanan dan `Semua Data`).
+7. Jika pada hari tersebut sudah ada baris izin untuk orang yang sama, data izin otomatis dihapus di Supabase dan Sheets (hadir selalu menang).
+8. Peserta diarahkan ke halaman bukti presensi (`/sukses`) yang menampilkan rincian nama, universitas, tanggal, dan jam tercatat (WITA).
 
-### Mode Izin (`/api/izin`)
-- Tanpa validasi lokasi.
-- Field: jenis (Sakit, Izin, Lainnya), keterangan (maks 100 karakter), link surat (opsional, hanya `https://drive.google.com/` atau `https://docs.google.com/`).
-- Tanggal diambil dari server, jadi izin hanya untuk hari ini.
-- Ditolak jika hari itu sudah hadir atau sudah izin.
-- Popup nama baru berlaku sama seperti mode Hadir.
-- Surat izin hanya berupa link Drive dari peserta. Isinya tidak diverifikasi oleh sistem.
+### 2. Mode Izin (`/api/izin`)
+- Tanpa validasi lokasi GPS.
+- Field: jenis (`Sakit`, `Izin`, `Lainnya`), keterangan (maks 100 karakter), link surat bukti (opsional, hanya `https://drive.google.com/` atau `https://docs.google.com/`).
+- Tanggal diambil dari server (WITA), sehingga izin hanya berlaku untuk hari berjalan.
+- Ditolak jika hari itu peserta sudah tercatat hadir atau sudah mengirim izin.
+- Popup konfirmasi peserta baru beserta input periode mulai dan selesai magang berlaku sama seperti mode Hadir.
+- Surat izin hanya berupa tautan Google Drive dari peserta; isinya diperiksa oleh pembimbing melalui Dashboard Admin.
+
+### 3. Dashboard Admin (`/admin` & `/admin/login`)
+Dilindungi autentikasi sesi admin, terbagi menjadi 5 tab utama yang membaca langsung dari database Supabase:
+- **Hari Ini**: Menampilkan 4 kartu ringkasan (*Sudah Hadir*, *Belum Pulang*, *Izin / Sakit*, dan *Belum Absen*), daftar kehadiran hari berjalan, daftar peserta yang masih di kantor (belum absen pulang), serta peserta aktif yang belum absen sama sekali.
+- **Rekap & Profil**: Menampilkan total kehadiran, tanggal terakhir hadir, filter peserta aktif (14 hari terakhir), pengaturan periode mulai/selesai magang, ekspor CSV, serta fitur **Kartu Profil Peserta** (dilengkapi progres persentase magang, hitung mundur sisa hari, dan tombol **Unduh PNG** berbasis HTML5 Canvas).
+- **Riwayat Kehadiran**: Tabel seluruh data presensi dengan filter rentang tanggal, universitas, dan nama. Mendukung **Tambah Absensi manual, Edit jam/data, Hapus baris**, serta **Ekspor CSV**.
+- **Data Izin / Sakit**: Tabel laporan ketidakhadiran dengan akses cepat ke tautan surat bukti Google Drive, filter tanggal, fitur **Tambah/Edit/Hapus Izin**, dan **Ekspor CSV**.
+- **Log Aktivitas**: Memantau riwayat operasi sistem dan status sinkronisasi cadangan ke Google Sheets.
 
 ## Stack
-Next.js 14 (App Router, TypeScript, Tailwind), Supabase (Postgres), Google Sheets API (Service Account), Vercel (hosting dan cron).
+Next.js 14 (App Router, TypeScript, Tailwind CSS), Supabase (Postgres - Database Utama), Google Sheets API (Service Account - Backup Sekunder), Vercel (hosting dan cron).
 
-## Database
-Dua tabel: `absensi` dan `izin`. Struktur `absensi` ada di `setup.sql`.
+## Database (Utama)
+Data operasional utama disimpan di Supabase pada tabel `absensi` dan `izin` (serta penyimpanan periode masa magang peserta). Struktur dasar ada di `setup.sql`.
 
 Aturan penting:
 - Primary key `(nama_key, univ_key, tanggal)`.
-- `nama_key` dan `univ_key` adalah **generated column** (`lower(trim(...))`). **Jangan pernah diisi dari kode** (insert/upsert), hanya dipakai untuk filter. Jika diisi, Supabase menolak dengan error 428C9.
-- RLS aktif tanpa policy. Akses hanya lewat service role dari server.
+- `nama_key` dan `univ_key` adalah **generated column** (`lower(trim(...))`). **Jangan pernah diisi dari kode** (`insert`/`upsert`), hanya dipakai untuk filter. Jika diisi, Supabase menolak dengan error `428C9`.
+- RLS aktif tanpa policy publik. Akses hanya lewat `service_role` dari server.
 - Service role butuh grant: `grant select, insert, update, delete on table public.<tabel> to service_role;`
 
 SQL tabel `izin`:
@@ -58,88 +78,25 @@ grant select, insert, update, delete on table public.izin to service_role;
 
 Kolom tambahan di `absensi`: `alter table public.absensi add column if not exists keterangan text;`
 
-## Google Sheets
+## Google Sheets (Cadangan / Backup)
 
-Tab yang dibuat **otomatis** oleh server: tab bulanan (`YYYY-MM`), `Semua Data`, dan `Izin` (lengkap dengan format).
+Karena seluruh rekapitulasi, pemantauan peserta aktif, dan ekspor CSV kini sudah tersedia langsung di **Dashboard Admin (`/admin`)** dari database Supabase, Google Sheets hanya berperan sebagai **arsip cadangan (*backup*)**.
+
+Tab yang dibuat dan diisi **otomatis** oleh server sebagai cadangan: tab bulanan (`YYYY-MM`), `Semua Data`, dan `Izin` (lengkap dengan format).
 
 | Tab | Kolom |
 |---|---|
 | Bulanan dan Semua Data | NAMA, UNIVERSITAS, TANGGAL, HARI, JAM MASUK, JAM KELUAR, KETERANGAN |
 | Izin | NAMA, UNIVERSITAS, TANGGAL, HARI, JENIS, KETERANGAN, LINK SURAT |
 
-Jika menambah kolom baru lewat kode, tab yang sudah ada **tidak berubah otomatis**. Tambahkan kolomnya manual di tab tersebut. Kiriman ulang di hari yang sama tidak mungkin (dibatasi satu kali sehari), jadi tidak ada baris ganda.
+Jika menambah kolom baru lewat kode, tab yang sudah ada di Sheets **tidak berubah otomatis**. Tambahkan kolomnya manual di tab tersebut.
 
-Tab **Rekap** dan **Aktif** dibuat **manual** satu kali.
+*(Opsional)* Jika pembimbing tetap ingin melihat tab rumus manual di dalam Google Sheets tanpa membuka Dashboard Admin, tab **Rekap** dan **Aktif** dapat dibuat manual satu kali di Sheets:
 
 **Rekap**, isi sel A1:
 
-```
+```text
 =QUERY(UNIQUE('Semua Data'!A2:C); "select Col1, Col2, count(Col3), max(Col3) where Col1 is not null group by Col1, Col2 label Col1 'Nama', Col2 'Universitas', count(Col3) 'Jumlah Hadir', max(Col3) 'Terakhir Hadir'"; 0)
 ```
 
-**Aktif** (hanya peserta yang absen dalam 14 hari terakhir). Ketik judul manual di A1:D1 (Nama, Universitas, Jumlah Hadir, Terakhir Hadir), lalu isi sel A2:
-
-```
-=IFERROR(FILTER(Rekap!A2:D; Rekap!A2:A<>""; TEXT(Rekap!D2:D;"yyyy-mm-dd")>=TEXT(TODAY()-14;"yyyy-mm-dd")); "Belum ada peserta aktif")
-```
-
-Catatan:
-- Angka 14 bisa diganti (misalnya 30).
-- Jika Sheets memakai koma sebagai pemisah argumen, ganti semua titik koma menjadi koma.
-- Ketik rumus langsung di Sheets. Jangan tempel dari tempat lain karena tanda kutip bisa berubah menjadi kutip melengkung dan rumus error.
-- Rekap dan Aktif berisi hasil rumus. **Jangan hapus baris di kedua tab itu.** Saat membersihkan data, hapus baris hanya di Semua Data, tab bulanan, dan Izin.
-- Tab Izin berisi keterangan dan link surat. Bagikan hanya ke pembimbing.
-
-## Cron
-Satu cron harian `/api/cron` (dilindungi `CRON_SECRET`, dikonfigurasi di `vercel.json`):
-- Mengulang sinkronisasi baris `absensi` dan `izin` dengan `synced_to_sheets = false`.
-- Keepalive Supabase agar project gratis tidak dijeda.
-
-## Environment Variable (sembilan, nama harus persis)
-
-| Variabel | Fungsi |
-|---|---|
-| `SUPABASE_URL` | URL project Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | Secret key Supabase (`sb_secret_...`), hanya di server |
-| `GOOGLE_CLIENT_EMAIL` | Email Service Account Google |
-| `GOOGLE_PRIVATE_KEY` | Private key Service Account |
-| `SPREADSHEET_ID` | ID spreadsheet tujuan |
-| `OFFICE_LAT` | Latitude kantor |
-| `OFFICE_LNG` | Longitude kantor |
-| `RADIUS_METER` | Radius absen dalam meter (150) |
-| `CRON_SECRET` | String acak panjang pelindung `/api/cron` |
-
-Catatan:
-- Di Vercel, `GOOGLE_PRIVATE_KEY` ditempel **tanpa tanda kutip**, dan `\n` tetap berupa tulisan `\n`.
-- Spreadsheet harus dibagikan sebagai Editor ke email Service Account.
-- Setelah mengubah env di Vercel, **wajib Redeploy**.
-- Nilai rahasia tidak boleh masuk Git. `.env.local` dan file JSON key Google ada di `.gitignore`.
-
-## Menjalankan Lokal
-
-```
-npm install
-copy .env.example .env.local
-npm run dev
-```
-
-Isi `.env.local` dengan sembilan variabel di atas, lalu buka http://localhost:3000.
-
-Untuk uji dari luar kantor, ganti sementara `OFFICE_LAT` dan `OFFICE_LNG` di `.env.local` ke lokasi sendiri, dan **kembalikan setelahnya**. Uji lokal memakai Supabase dan Sheets yang sama dengan produksi, jadi baris uji harus dihapus di **Supabase dan Sheets sekaligus** (seluruh barisnya).
-
-## Perawatan Rutin
-- **Koreksi typo atau salah isi jam:** manual di Supabase (tabel `absensi`, kolom nama atau jam) dan di sel Sheets. Peserta tidak bisa mengirim ulang di hari yang sama.
-- **Lokasi ditolak di kantor:** naikkan `RADIUS_METER` ke 200 di Vercel, lalu Redeploy. Jika masih ditolak, ambil ulang koordinat dari Google Maps tepat di titik absen.
-- **Nama atau universitas tertulis berbeda** (misalnya singkatan vs nama lengkap) dianggap orang berbeda di Rekap. Koreksi manual di Sheets dan Supabase.
-- **Domain `.my.id`** perlu diperpanjang tiap tahun. Jika lupa, QR di poster mati.
-- Cek Rekap sesekali. Nama aneh dengan Jumlah Hadir 1 biasanya typo.
-
-## Serah Terima
-Pindahkan atau bagikan ke pembimbing (email resmi kantor): akun Supabase, Vercel, Google Cloud (project dan Service Account), GitHub, dan penyedia domain.
-
-## Batasan yang Disengaja
-- Tanpa login, tanpa pendaftaran peserta, tanpa halaman admin.
-- Identitas peserta hanya kombinasi nama + universitas (huruf besar kecil tidak dibedakan).
-- Hari masuk Senin sampai Kamis, tetapi sistem tidak memblokir hari lain.
-- Tidak ada jendela waktu dan tidak ada validasi jam masuk.
-- QR statis, satu kali absen per orang per hari.
+**Aktif** (hanya peserta yang absen dalam 14 hari terakhir). Ketik judul manual di A1:D1 (Nama, Universitas, Jumlah Hadir
