@@ -35,6 +35,7 @@ export default function AbsenPage() {
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [spModal, setSpModal] = useState<'none' | 'sp2' | 'sp3'>('none');
 
   useEffect(() => {
     try {
@@ -65,7 +66,7 @@ export default function AbsenPage() {
     setStatusMsg(null);
   };
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement> | any, konfirmasi_baru?: boolean) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement> | any, konfirmasi_baru?: boolean, ack_sp2?: boolean) => {
     if (e && e.preventDefault) e.preventDefault();
     setError(null);
     setStatusMsg(null);
@@ -96,6 +97,7 @@ export default function AbsenPage() {
           lng,
           akurasi_gps: accuracy,
           konfirmasi_baru,
+          ack_sp2,
           tgl_mulai: form.tgl_mulai,
           tgl_selesai: form.tgl_selesai,
         };
@@ -108,6 +110,18 @@ export default function AbsenPage() {
           body: JSON.stringify(payload),
         });
         const data = await res.json();
+
+        if (data.status === 'sp3_blocked') {
+          setLoading(false);
+          setSpModal('sp3');
+          return;
+        }
+
+        if (data.status === 'sp2_warning') {
+          setLoading(false);
+          setSpModal('sp2');
+          return;
+        }
 
         if (data.status === 'sudah_hadir_hari_ini') {
           setLoading(false);
@@ -214,7 +228,6 @@ export default function AbsenPage() {
 
   return (
     <div className="min-h-screen bg-[#F4F6F8] flex flex-col justify-between font-sans text-slate-900 selection:bg-[#043666] selection:text-[#E9C170]">
-      {/* Top Bar Resmi dengan Palet Wisdom Blue (#043666) & Dignity Gold (#E9C170) */}
       <header className="bg-[#043666] border-b-4 border-[#E9C170] text-white shadow-sm">
         <div className="max-w-xl mx-auto px-4 py-3.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -240,6 +253,115 @@ export default function AbsenPage() {
           </span>
         </div>
       </header>
+
+      {/* POP-UP SP-2: PERINGATAN TERAKHIR (SUDAH 2X TIDAK ABSEN PULANG) */}
+      {spModal === 'sp2' && (
+        <div className="fixed inset-0 bg-slate-950/75 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-2xl border-2 border-amber-500 overflow-hidden">
+            <div className="bg-[#043666] px-6 py-4 text-white border-b-4 border-amber-400 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-amber-300 block">
+                  Peringatan Kepatuhan Presensi
+                </span>
+                <h3 className="text-base font-extrabold tracking-tight text-white mt-0.5">
+                  SURAT PERINGATAN KE-2 (SP-2)
+                </h3>
+              </div>
+              <span className="px-2.5 py-1 rounded text-[10px] font-black bg-amber-400 text-slate-900 uppercase">
+                2 / 3 PELANGGARAN
+              </span>
+            </div>
+
+            <div className="p-6 text-sm text-slate-800 space-y-4">
+              <div className="p-3.5 bg-amber-50 border border-amber-300 border-l-4 border-l-amber-600 rounded-r-md text-xs text-amber-950 leading-relaxed">
+                <p className="font-extrabold uppercase text-amber-900 mb-1">
+                  Terdeteksi 2x Tidak Absen Pulang
+                </p>
+                Sistem mencatat peserta atas nama <strong className="underline">{form.nama}</strong> sudah <strong>2 kali</strong> mengabaikan kewajiban Presensi Kepulangan.
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-bold">Status Saat Ini:</span>
+                  <span className="font-extrabold text-amber-700">SP-2 (Peringatan Terakhir)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-bold">Sisa Toleransi Sistem:</span>
+                  <span className="font-extrabold text-red-600">1 Kali Lagi</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Ini adalah <strong>kesempatan terakhir</strong>. Apabila Anda kembali tidak melakukan presensi pulang untuk ke-3 kalinya, maka pada presensi berikutnya akses akun Anda akan <strong>diblokir otomatis (SP-3)</strong>.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSpModal('none');
+                  handleSubmit(null, false, true);
+                }}
+                className="w-full py-3 px-4 bg-[#043666] hover:bg-[#04315C] text-[#E9C170] font-extrabold text-xs uppercase tracking-widest rounded-md shadow-sm transition-colors"
+              >
+                Saya Mengerti & Lanjutkan Presensi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POP-UP SP-3: TERBLOKIR TOTAL SETELAH 3X TIDAK ABSEN PULANG */}
+      {spModal === 'sp3' && (
+        <div className="fixed inset-0 bg-slate-950/80 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-2xl border-2 border-red-700 overflow-hidden">
+            <div className="bg-red-800 px-6 py-4 text-white border-b-4 border-[#E9C170] flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#E9C170] block">
+                  Sistem Pengawasan Disiplin Magang
+                </span>
+                <h3 className="text-base font-extrabold tracking-tight text-white mt-0.5">
+                  AKSES PRESENSI TERBLOKIR (SP-3)
+                </h3>
+              </div>
+              <span className="px-2.5 py-1 rounded text-[10px] font-black bg-[#E9C170] text-red-950 uppercase">
+                TERBLOKIR
+              </span>
+            </div>
+
+            <div className="p-6 text-sm text-slate-800 space-y-4">
+              <div className="p-3.5 bg-red-50 border border-red-200 border-l-4 border-l-red-700 rounded-r-md text-xs text-red-950 leading-relaxed">
+                <p className="font-extrabold uppercase text-red-800 mb-1">
+                  Batas Maksimal Pelanggaran Tercapai (3x)
+                </p>
+                Peserta atas nama <strong className="underline">{form.nama}</strong> tercatat telah <strong>3 kali</strong> tidak melakukan Presensi Kepulangan mandiri.
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-bold">Status Sanksi:</span>
+                  <span className="font-extrabold text-red-700">SP-3 • Terblokir</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-bold">Tindak Lanjut:</span>
+                  <span className="font-bold text-slate-900">Wajib Pembukaan Blokir oleh Admin</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Akses presensi atas nama Anda telah dikunci oleh sistem Kanwil Ditjen Imigrasi Sulawesi Selatan. Silakan hubungi <strong>Administrator / Pembimbing Magang</strong> untuk membuka blokir pada Dashboard Admin.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setSpModal('none')}
+                className="w-full py-3 px-4 bg-red-800 hover:bg-red-900 text-white font-extrabold text-xs uppercase tracking-widest rounded-md shadow-sm transition-colors"
+              >
+                Tutup Peringatan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Konfirmasi Peserta Magang Baru */}
       {showConfirm && (
@@ -332,10 +454,8 @@ export default function AbsenPage() {
         </div>
       )}
 
-      {/* Kontainer Utama Form Presensi */}
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6">
         <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          {/* Sub-Header Kartu dengan Wisdom Blue (#043666) Solid & Dignity Gold (#E9C170) */}
           <div className="bg-[#043666] px-6 py-5 text-white border-b-2 border-[#E9C170]">
             <div className="flex items-center justify-between">
               <div>
@@ -357,7 +477,6 @@ export default function AbsenPage() {
           </div>
 
           <div className="p-6">
-            {/* Navigasi Segmented Mode */}
             <div className="grid grid-cols-3 gap-1.5 bg-slate-100 p-1.5 rounded-lg border border-slate-200 mb-6">
               {(['hadir', 'pulang', 'izin'] as Mode[]).map((item) => (
                 <button
@@ -379,7 +498,6 @@ export default function AbsenPage() {
               ))}
             </div>
 
-            {/* Notifikasi Error / Status */}
             {error && (
               <div className="mb-5 p-3.5 bg-red-50 border-l-4 border-red-600 text-red-800 rounded-r-md text-xs font-medium leading-relaxed">
                 {error}
@@ -391,7 +509,6 @@ export default function AbsenPage() {
               </div>
             )}
 
-            {/* Formulir Input */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
@@ -577,7 +694,6 @@ export default function AbsenPage() {
         </div>
       </main>
 
-      {/* Footer Resmi dengan Shade Wisdom Blue (#04315C) & Border Dignity Gold (#BD944D) */}
       <footer className="bg-[#04315C] text-slate-300 py-3.5 text-center text-xs border-t-2 border-[#BD944D]">
         <div className="max-w-xl mx-auto px-4">
           Direktorat Jenderal Imigrasi Kantor Wilayah Sulawesi Selatan © 2026

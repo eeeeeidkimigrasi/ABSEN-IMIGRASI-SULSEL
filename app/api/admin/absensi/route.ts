@@ -4,6 +4,7 @@ import { appendAbsen, updateAbsenRow, deleteAbsenRows } from '@/lib/sheets';
 import { getTodayDate, getDayName } from '@/lib/waktu';
 
 const rapikan = (teks: string) => teks.trim().replace(/\s+/g, ' ');
+const stripTapTag = (ket: string | null) => (ket ? ket.replace(/\[TAP\]/g, '').trim() : '');
 
 const validateDate = (date: string) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
@@ -45,7 +46,9 @@ export async function POST(req: NextRequest) {
   const tanggal = body.tanggal?.trim();
   const jam_masuk = body.jam_masuk?.trim();
   const jam_keluar = body.jam_keluar?.trim() || null;
-  const keterangan = body.keterangan ? rapikan(body.keterangan).slice(0, 100) : null;
+  const tidak_absen_pulang = Boolean(body.tidak_absen_pulang);
+  const rawKet = body.keterangan ? rapikan(String(body.keterangan).replace(/\[TAP\]/g, '')).slice(0, 90) : '';
+  const keterangan = tidak_absen_pulang ? (rawKet ? `${rawKet} [TAP]` : '[TAP]') : (rawKet || null);
 
   if (!nama || !universitas || !tanggal || !jam_masuk || !validateDate(tanggal) || (jam_keluar !== null && jam_keluar < jam_masuk)) {
     return NextResponse.json({ error: 'Data tidak valid atau tanggal di masa depan.' }, { status: 400 });
@@ -53,15 +56,6 @@ export async function POST(req: NextRequest) {
 
   const nama_key = nama.toLowerCase();
   const univ_key = universitas.toLowerCase();
-
-  const { data: izin } = await supabase
-    .from('izin')
-    .select('tanggal')
-    .eq('nama_key', nama_key)
-    .eq('univ_key', univ_key)
-    .eq('tanggal', tanggal);
-
-  // Diizinkan tambah/edit absensi walau ada izin
 
   const { error } = await supabase.from('absensi').insert({
     nama,
@@ -87,7 +81,7 @@ export async function POST(req: NextRequest) {
   const hari = getDayName(tanggal);
   let sheets_ok = true;
   try {
-    await appendAbsen({ nama, universitas, tanggal, hari, jam_masuk, jam_keluar, keterangan });
+    await appendAbsen({ nama, universitas, tanggal, hari, jam_masuk, jam_keluar, keterangan: stripTapTag(keterangan) });
     await supabase
       .from('absensi')
       .update({ synced_to_sheets: true })
@@ -129,7 +123,9 @@ export async function PUT(req: NextRequest) {
   const tanggal = body.tanggal?.trim();
   const jam_masuk = body.jam_masuk?.trim();
   const jam_keluar = body.jam_keluar?.trim() || null;
-  const keterangan = body.keterangan ? rapikan(body.keterangan).slice(0, 100) : null;
+  const tidak_absen_pulang = Boolean(body.tidak_absen_pulang);
+  const rawKet = body.keterangan ? rapikan(String(body.keterangan).replace(/\[TAP\]/g, '')).slice(0, 90) : '';
+  const keterangan = tidak_absen_pulang ? (rawKet ? `${rawKet} [TAP]` : '[TAP]') : (rawKet || null);
 
   if (!oldNama || !oldUniv || !oldTanggal || !nama || !universitas || !tanggal || !jam_masuk || !validateDate(tanggal) || (jam_keluar !== null && jam_keluar < jam_masuk)) {
     return NextResponse.json({ error: 'Data tidak valid atau tanggal di masa depan.' }, { status: 400 });
@@ -139,15 +135,6 @@ export async function PUT(req: NextRequest) {
   const old_univ_key = oldUniv.toLowerCase();
   const new_nama_key = nama.toLowerCase();
   const new_univ_key = universitas.toLowerCase();
-
-  const { data: izin } = await supabase
-    .from('izin')
-    .select('tanggal')
-    .eq('nama_key', new_nama_key)
-    .eq('univ_key', new_univ_key)
-    .eq('tanggal', tanggal);
-
-  // Diizinkan tambah/edit absensi walau ada izin
 
   const { data: oldRow } = await supabase
     .from('absensi')
@@ -189,7 +176,7 @@ export async function PUT(req: NextRequest) {
   try {
     await updateAbsenRow(
       { nama: oldRow.nama, universitas: oldRow.universitas, tanggal: oldRow.tanggal },
-      { nama, universitas, tanggal, hari, jam_masuk, jam_keluar, keterangan: keterangan || '' }
+      { nama, universitas, tanggal, hari, jam_masuk, jam_keluar, keterangan: stripTapTag(keterangan) }
     );
     await supabase
       .from('absensi')

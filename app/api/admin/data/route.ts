@@ -34,40 +34,34 @@ async function handleLog() {
 
 async function handleSummary() {
   const tanggal = getTodayDate();
-  
-  // 1. Sudah hadir hari ini
+
   const { data: hadir } = await supabase
     .from('absensi')
     .select('nama, universitas, jam_masuk, jam_keluar, keterangan')
     .eq('tanggal', tanggal)
     .order('jam_masuk', { ascending: false });
 
-  // 2. Izin hari ini
   const { data: izin } = await supabase
     .from('izin')
     .select('nama, universitas, jenis, keterangan, link_surat')
     .eq('tanggal', tanggal);
 
-  // 3. Belum absen (Peserta aktif yang tidak hadir dan tidak izin hari ini)
   const thresholdDate = new Date();
   thresholdDate.setDate(thresholdDate.getDate() - ACTIVE_DAYS);
   const thresholdStr = thresholdDate.toISOString().split('T')[0];
 
-  // Get active participants
   const { data: aktif } = await supabase
     .from('absensi')
     .select('nama, universitas, nama_key, univ_key')
     .gte('tanggal', thresholdStr);
 
-  // Unique participants
-  const uniqueAktif = Array.from(new Map(aktif?.map(a => [`${a.nama_key}|${a.univ_key}`, a])).values());
+  const uniqueAktif = Array.from(new Map(aktif?.map((a) => [`${a.nama_key}|${a.univ_key}`, a])).values());
 
-  const hadirKeys = new Set(hadir?.map(h => `${h.nama.toLowerCase().trim()}|${h.universitas.toLowerCase().trim()}`));
-  const izinKeys = new Set(izin?.map(i => `${i.nama.toLowerCase().trim()}|${i.universitas.toLowerCase().trim()}`));
+  const hadirKeys = new Set(hadir?.map((h) => `${h.nama.toLowerCase().trim()}|${h.universitas.toLowerCase().trim()}`));
+  const izinKeys = new Set(izin?.map((i) => `${i.nama.toLowerCase().trim()}|${i.universitas.toLowerCase().trim()}`));
 
-  const belum = uniqueAktif.filter(a => !hadirKeys.has(`${a.nama_key}|${a.univ_key}`) && !izinKeys.has(`${a.nama_key}|${a.univ_key}`));
+  const belum = uniqueAktif.filter((a) => !hadirKeys.has(`${a.nama_key}|${a.univ_key}`) && !izinKeys.has(`${a.nama_key}|${a.univ_key}`));
 
-  // 4. Logs admin
   const { data: logsData } = await supabase
     .from('admin_log')
     .select('id, waktu, aksi, tabel, sebelum, sesudah, sheets_ok')
@@ -80,10 +74,11 @@ async function handleSummary() {
 async function handleRekap(params: URLSearchParams) {
   const search = params.get('q')?.slice(0, 80) || '';
   const onlyActive = params.get('active') === 'true';
+  const todayStr = getTodayDate();
 
   let query = supabase
     .from('absensi')
-    .select('nama, universitas, tanggal, nama_key, univ_key, tgl_mulai, tgl_selesai');
+    .select('nama, universitas, tanggal, jam_keluar, keterangan, nama_key, univ_key, tgl_mulai, tgl_selesai');
 
   if (search) {
     query = query.ilike('nama', `%${search}%`);
@@ -106,9 +101,20 @@ async function handleRekap(params: URLSearchParams) {
     izinCountMap.set(k, cur);
   }
 
-  // Aggregate by person
-  const rekapMap = new Map<string, { nama: string; universitas: string; count: number; izinCount: number; terakhir: string; tgl_mulai: string | null; tgl_selesai: string | null }>();
-  
+  const rekapMap = new Map<
+    string,
+    {
+      nama: string;
+      universitas: string;
+      count: number;
+      izinCount: number;
+      spCount: number;
+      terakhir: string;
+      tgl_mulai: string | null;
+      tgl_selesai: string | null;
+    }
+  >();
+
   const now = new Date();
   const threshold = new Date();
   threshold.setDate(now.getDate() - ACTIVE_DAYS);
@@ -121,11 +127,19 @@ async function handleRekap(params: URLSearchParams) {
       universitas: row.universitas,
       count: 0,
       izinCount: izInfo?.count || 0,
+      spCount: 0,
       terakhir: row.tanggal,
       tgl_mulai: row.tgl_mulai || izInfo?.tgl_mulai || null,
       tgl_selesai: row.tgl_selesai || izInfo?.tgl_selesai || null,
     };
     entry.count++;
+
+    const hasTapTag = typeof row.keterangan === 'string' && row.keterangan.includes('[TAP]');
+    const isPastUnclosed = row.tanggal < todayStr && !row.jam_keluar;
+    if (hasTapTag || isPastUnclosed) {
+      entry.spCount++;
+    }
+
     if (row.tanggal > entry.terakhir) entry.terakhir = row.tanggal;
     if (row.tgl_mulai && !entry.tgl_mulai) entry.tgl_mulai = row.tgl_mulai;
     if (row.tgl_selesai && !entry.tgl_selesai) entry.tgl_selesai = row.tgl_selesai;
@@ -136,7 +150,7 @@ async function handleRekap(params: URLSearchParams) {
 
   if (onlyActive) {
     const thresholdStr = threshold.toISOString().split('T')[0];
-    result = result.filter(r => r.terakhir >= thresholdStr);
+    result = result.filter((r) => r.terakhir >= thresholdStr);
   }
 
   return NextResponse.json(result);
@@ -150,9 +164,7 @@ async function handleRiwayat(params: URLSearchParams) {
   const page = Math.min(Math.max(parseInt(params.get('page') || '1'), 1), 1000);
   const size = Math.min(Math.max(parseInt(params.get('size') || '50'), 1), 100);
 
-  let query = supabase
-    .from('absensi')
-    .select('*', { count: 'exact' });
+  let query = supabase.from('absensi').select('*', { count: 'exact' });
 
   if (start) query = query.gte('tanggal', start);
   if (end) query = query.lte('tanggal', end);
@@ -187,6 +199,43 @@ async function handleIzin(params: URLSearchParams) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+
+    // Aksi Buka Blokir SP-3
+    if (body.action === 'unblock_sp') {
+      const nama_key = (body.nama || '').trim().toLowerCase();
+      const univ_key = (body.universitas || '').trim().toLowerCase();
+      const todayStr = getTodayDate();
+
+      if (!nama_key || !univ_key) {
+        return NextResponse.json({ ok: false, error: 'Nama dan universitas wajib diisi.' }, { status: 400 });
+      }
+
+      const { data: rows } = await supabase
+        .from('absensi')
+        .select('tanggal, jam_keluar, keterangan')
+        .eq('nama_key', nama_key)
+        .eq('univ_key', univ_key);
+
+      for (const r of rows || []) {
+        const hasTap = typeof r.keterangan === 'string' && r.keterangan.includes('[TAP]');
+        const isPastNull = r.tanggal < todayStr && !r.jam_keluar;
+        if (hasTap || isPastNull) {
+          const cleanKet = r.keterangan ? r.keterangan.replace(/\[TAP\]/g, '').trim() || null : null;
+          await supabase
+            .from('absensi')
+            .update({
+              jam_keluar: r.jam_keluar || '16:00',
+              keterangan: cleanKet,
+            })
+            .eq('nama_key', nama_key)
+            .eq('univ_key', univ_key)
+            .eq('tanggal', r.tanggal);
+        }
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
     const { nama, universitas, tgl_mulai, tgl_selesai } = body;
 
     if (!nama || !universitas || !tgl_mulai || !tgl_selesai || tgl_selesai < tgl_mulai) {

@@ -19,6 +19,7 @@ export function RiwayatTab() {
     jam_masuk: '08:00',
     jam_keluar: '16:00',
     keterangan: '',
+    tidak_absen_pulang: false,
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -62,12 +63,17 @@ export function RiwayatTab() {
       jam_masuk: '08:00',
       jam_keluar: '16:00',
       keterangan: '',
+      tidak_absen_pulang: false,
     });
     setFormError(null);
     setModalOpen(true);
   };
 
   const openEdit = (r: any) => {
+    const rawKet = String(r.keterangan || '');
+    const hasTap = rawKet.includes('[TAP]');
+    const cleanKet = rawKet.replace(/\[TAP\]/g, '').trim();
+
     setMode('edit');
     setOldKeys({ nama: r.nama, universitas: r.universitas, tanggal: r.tanggal });
     setForm({
@@ -76,7 +82,8 @@ export function RiwayatTab() {
       tanggal: r.tanggal || '',
       jam_masuk: (r.jam_masuk || '08:00').slice(0, 5),
       jam_keluar: (r.jam_keluar || '').slice(0, 5),
-      keterangan: r.keterangan || '',
+      keterangan: cleanKet,
+      tidak_absen_pulang: hasTap,
     });
     setFormError(null);
     setModalOpen(true);
@@ -285,44 +292,57 @@ export function RiwayatTab() {
                   </td>
                 </tr>
               ) : (
-                data.map((r, i) => (
-                  <tr key={i} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-slate-700">{r.tanggal}</td>
-                    <td className="px-5 py-3.5 font-bold text-slate-900">{r.nama}</td>
-                    <td className="px-5 py-3.5 text-slate-700">{r.universitas}</td>
-                    <td className="px-5 py-3.5">
-                      <span className="inline-block px-2.5 py-0.5 text-xs font-bold rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        {String(r.jam_masuk || '').slice(0, 5)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      {r.jam_keluar ? (
-                        <span className="inline-block px-2.5 py-0.5 text-xs font-bold rounded bg-slate-100 text-slate-800 border border-slate-300">
-                          {String(r.jam_keluar).slice(0, 5)}
+                data.map((r, i) => {
+                  const rawKet = String(r.keterangan || '');
+                  const hasTap = rawKet.includes('[TAP]') || (r.tanggal < todayStr && !r.jam_keluar);
+                  const cleanKet = rawKet.replace(/\[TAP\]/g, '').trim();
+
+                  return (
+                    <tr key={i} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-slate-700">{r.tanggal}</td>
+                      <td className="px-5 py-3.5 font-bold text-slate-900">{r.nama}</td>
+                      <td className="px-5 py-3.5 text-slate-700">{r.universitas}</td>
+                      <td className="px-5 py-3.5">
+                        <span className="inline-block px-2.5 py-0.5 text-xs font-bold rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          {String(r.jam_masuk || '').slice(0, 5)}
                         </span>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 text-slate-600">{r.keterangan || '-'}</td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-right space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(r)}
-                        className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-[#043666] border border-slate-300 rounded hover:bg-[#043666] hover:text-white transition-colors"
-                      >
-                        Ubah
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(r)}
-                        className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200 rounded hover:bg-red-700 hover:text-white transition-colors"
-                      >
-                        Hapus
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {r.jam_keluar ? (
+                            <span className="inline-block px-2.5 py-0.5 text-xs font-bold rounded bg-slate-100 text-slate-800 border border-slate-300">
+                              {String(r.jam_keluar).slice(0, 5)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                          {hasTap && (
+                            <span className="inline-block px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded bg-amber-100 text-amber-900 border border-amber-300">
+                              Tidak Absen Pulang
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-600">{cleanKet || '-'}</td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-right space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(r)}
+                          className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-[#043666] border border-slate-300 rounded hover:bg-[#043666] hover:text-white transition-colors"
+                        >
+                          Ubah
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(r)}
+                          className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200 rounded hover:bg-red-700 hover:text-white transition-colors"
+                        >
+                          Hapus
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
               {!loading && data.length === 0 && (
                 <tr>
@@ -455,11 +475,31 @@ export function RiwayatTab() {
                   </label>
                   <input
                     type="text"
-                    maxLength={100}
+                    maxLength={90}
                     value={form.keterangan}
                     onChange={(e) => setForm({ ...form, keterangan: e.target.value })}
                     className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-[#043666]"
                   />
+                </div>
+
+                {/* Kotak Centang Tidak Absen Pulang (Hitung SP) */}
+                <div className="p-3.5 bg-amber-50/90 border border-amber-300 rounded-lg">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={form.tidak_absen_pulang}
+                      onChange={(e) => setForm({ ...form, tidak_absen_pulang: e.target.checked })}
+                      className="mt-0.5 w-4 h-4 accent-[#043666] rounded"
+                    />
+                    <div className="text-xs leading-relaxed">
+                      <span className="font-extrabold text-amber-950 uppercase tracking-wider block">
+                        Tidak absen pulang (Hitung SP)
+                      </span>
+                      <span className="text-amber-800 text-[11px]">
+                        Centang jika jam keluar ini diisikan oleh Admin karena peserta lupa/tidak absen pulang mandiri.
+                      </span>
+                    </div>
+                  </label>
                 </div>
 
                 <div className="flex justify-end gap-2.5 pt-3">

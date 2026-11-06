@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { appendAbsen, deleteIzinRow, updateJamKeluarRow } from '@/lib/sheets';
+import { appendAbsen, updateJamKeluarRow } from '@/lib/sheets';
 import { jarakMeter } from '@/lib/geo';
 import { getTodayDate, getDayName } from '@/lib/waktu';
 
@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
     lng?: number;
     akurasi_gps?: number;
     konfirmasi_baru?: boolean;
+    ack_sp2?: boolean;
     keterangan?: string;
     tgl_mulai?: string;
     tgl_selesai?: string;
@@ -76,6 +77,30 @@ export async function POST(req: NextRequest) {
   }
   if (lat == null || lng == null) {
     return NextResponse.json({ ok: false, error: 'Lokasi tidak terbaca.' }, { status: 400 });
+  }
+
+  // Cek akumulasi SP (Tidak absen pulang) untuk peserta ini
+  const { data: pastRows } = await supabase
+    .from('absensi')
+    .select('tanggal, jam_keluar, keterangan')
+    .eq('nama_key', nama_key)
+    .eq('univ_key', univ_key);
+
+  let spCount = 0;
+  for (const r of pastRows || []) {
+    const hasTap = typeof r.keterangan === 'string' && r.keterangan.includes('[TAP]');
+    const isPastUnclosed = r.tanggal < tanggal && !r.jam_keluar;
+    if (hasTap || isPastUnclosed) {
+      spCount++;
+    }
+  }
+
+  if (spCount >= 3) {
+    return NextResponse.json({ status: 'sp3_blocked', sp_count: spCount });
+  }
+
+  if (mode === 'hadir' && spCount === 2 && !body.ack_sp2) {
+    return NextResponse.json({ status: 'sp2_warning', sp_count: spCount });
   }
 
   const jarak = jarakMeter(lat, lng, OFFICE_LAT, OFFICE_LNG);
@@ -159,8 +184,6 @@ export async function POST(req: NextRequest) {
         .eq('nama_key', nama_key)
         .eq('univ_key', univ_key)
         .eq('tanggal', tanggal);
-
-      // Izin hari ini tetap dipertahankan
     } catch (e) {
       console.error('Sheets sync failed:', e);
     }

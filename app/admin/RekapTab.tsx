@@ -13,6 +13,7 @@ export function RekapTab() {
   const [editItem, setEditItem] = useState<{ nama: string; universitas: string; tgl_mulai: string; tgl_selesai: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState('');
+  const [unblockingKey, setUnblockingKey] = useState<string | null>(null);
 
   const [profileItem, setProfileItem] = useState<any | null>(null);
 
@@ -29,6 +30,30 @@ export function RekapTab() {
   useEffect(() => {
     loadRekap();
   }, [search, activeOnly]);
+
+  const handleUnblockSp = async (r: any) => {
+    const ok = window.confirm(`Buka blokir SP-3 dan reset catatan "Tidak absen pulang" untuk ${r.nama}?`);
+    if (!ok) return;
+    const key = `${r.nama}|${r.universitas}`;
+    setUnblockingKey(key);
+    try {
+      const res = await fetch('/api/admin/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unblock_sp', nama: r.nama, universitas: r.universitas }),
+      });
+      const result = await res.json();
+      if (res.ok && result.ok) {
+        loadRekap();
+      } else {
+        alert(result.error || 'Gagal membuka blokir.');
+      }
+    } catch {
+      alert('Gagal menghubungi server.');
+    } finally {
+      setUnblockingKey(null);
+    }
+  };
 
   const sortedData = [...data].sort((a, b) => {
     let valA = a[sortCol];
@@ -143,19 +168,15 @@ export function RekapTab() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // 1. Background Utama
     ctx.fillStyle = '#F4F6F8';
     ctx.fillRect(0, 0, 860, 600);
 
-    // 2. Header Banner Wisdom Blue (#043666)
     ctx.fillStyle = '#043666';
     ctx.fillRect(0, 0, 860, 150);
 
-    // Garis Dignity Gold (#E9C170)
     ctx.fillStyle = '#E9C170';
     ctx.fillRect(0, 150, 860, 6);
 
-    // Teks Header Kiri
     ctx.fillStyle = '#E9C170';
     ctx.font = 'bold 12px sans-serif';
     ctx.fillText('KARTU PROFIL & REKAPITULASI KEHADIRAN MAGANG', 42, 42);
@@ -168,7 +189,6 @@ export function RekapTab() {
     ctx.font = '16px sans-serif';
     ctx.fillText(item.universitas, 42, 114);
 
-    // 3. Logo & Teks Instansi Kanan Atas
     ctx.save();
     ctx.textAlign = 'right';
     ctx.fillStyle = '#E9C170';
@@ -199,7 +219,6 @@ export function RekapTab() {
 
     await drawLogo();
 
-    // 4. Kotak Mulai & Berakhir Magang
     const periodBoxes = [
       { label: 'MULAI MAGANG', val: item.tgl_mulai || 'Belum diatur', accent: '#043666' },
       { label: 'BERAKHIR MAGANG', val: item.tgl_selesai || 'Belum diatur', accent: '#BD944D' },
@@ -230,7 +249,6 @@ export function RekapTab() {
       ctx.fillText(String(pb.val), x + 24, y + 74);
     });
 
-    // 5. Statistik Kehadiran
     const stats = [
       { label: 'TOTAL HADIR', val: `${item.count} Hari`, color: '#043666', bg: '#F8FAFC', border: '#CBD5E1' },
       { label: 'TOTAL IZIN / SAKIT', val: `${item.izinCount || 0} Hari`, color: '#92400E', bg: '#FFFBEB', border: '#FDE68A' },
@@ -259,7 +277,6 @@ export function RekapTab() {
       ctx.fillText(String(st.val), x + 22, y + 82);
     });
 
-    // 6. Progress Bar Masa Magang
     const prog = calcProgress(item.tgl_mulai, item.tgl_selesai);
     if (prog) {
       const px = 42;
@@ -295,7 +312,6 @@ export function RekapTab() {
       ctx.fill();
     }
 
-    // 7. Footer Resmi
     ctx.fillStyle = '#64748B';
     ctx.font = '12px sans-serif';
     ctx.fillText(`Dicetak melalui Sistem Presensi Magang Ditjen Imigrasi Kanwil Sulsel | ${new Date().toISOString().slice(0, 10)}`, 42, 562);
@@ -374,49 +390,82 @@ export function RekapTab() {
                   </td>
                 </tr>
               ) : (
-                sortedData.map((r, i) => (
-                  <tr key={i} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-5 py-3.5 font-bold text-slate-900">{r.nama}</td>
-                    <td className="px-5 py-3.5 text-slate-700">{r.universitas}</td>
-                    <td className="px-5 py-3.5 text-xs text-slate-700">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">
-                          {r.tgl_mulai && r.tgl_selesai ? `${r.tgl_mulai} s/d ${r.tgl_selesai}` : 'Belum diatur'}
+                sortedData.map((r, i) => {
+                  const sp = r.spCount || 0;
+                  const rowKey = `${r.nama}|${r.universitas}`;
+                  return (
+                    <tr key={i} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-5 py-3.5 font-bold text-slate-900">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>{r.nama}</span>
+                          {sp === 1 && (
+                            <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded bg-amber-100 text-amber-900 border border-amber-300">
+                              SP-1
+                            </span>
+                          )}
+                          {sp === 2 && (
+                            <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded bg-orange-100 text-orange-900 border border-orange-300">
+                              SP-2
+                            </span>
+                          )}
+                          {sp >= 3 && (
+                            <>
+                              <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded bg-red-100 text-red-800 border border-red-300">
+                                SP-3 • Terblokir
+                              </span>
+                              <button
+                                type="button"
+                                disabled={unblockingKey === rowKey}
+                                onClick={() => handleUnblockSp(r)}
+                                className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded bg-[#043666] hover:bg-[#04315C] text-[#E9C170] shadow-sm transition-colors disabled:opacity-50"
+                              >
+                                {unblockingKey === rowKey ? 'Memproses...' : 'Buka Blokir'}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-700">{r.universitas}</td>
+                      <td className="px-5 py-3.5 text-xs text-slate-700">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">
+                            {r.tgl_mulai && r.tgl_selesai ? `${r.tgl_mulai} s/d ${r.tgl_selesai}` : 'Belum diatur'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditError('');
+                              setEditItem({
+                                nama: r.nama,
+                                universitas: r.universitas,
+                                tgl_mulai: r.tgl_mulai || '',
+                                tgl_selesai: r.tgl_selesai || '',
+                              });
+                            }}
+                            className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-[#043666] border border-slate-300 rounded hover:bg-[#043666] hover:text-white transition-colors"
+                          >
+                            Ubah
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-center">
+                        <span className="inline-block px-2.5 py-0.5 text-xs font-extrabold rounded bg-slate-100 text-[#043666] border border-slate-300">
+                          {r.count} Hari
                         </span>
+                      </td>
+                      <td className="px-5 py-3.5 font-medium text-slate-700">{r.terakhir}</td>
+                      <td className="px-5 py-3.5 text-center">
                         <button
                           type="button"
-                          onClick={() => {
-                            setEditError('');
-                            setEditItem({
-                              nama: r.nama,
-                              universitas: r.universitas,
-                              tgl_mulai: r.tgl_mulai || '',
-                              tgl_selesai: r.tgl_selesai || '',
-                            });
-                          }}
-                          className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-[#043666] border border-slate-300 rounded hover:bg-[#043666] hover:text-white transition-colors"
+                          onClick={() => setProfileItem(r)}
+                          className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-[#043666] hover:bg-[#04315C] text-[#E9C170] rounded shadow-sm transition-colors"
                         >
-                          Ubah
+                          Lihat Kartu
                         </button>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5 text-center">
-                      <span className="inline-block px-2.5 py-0.5 text-xs font-extrabold rounded bg-slate-100 text-[#043666] border border-slate-300">
-                        {r.count} Hari
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 font-medium text-slate-700">{r.terakhir}</td>
-                    <td className="px-5 py-3.5 text-center">
-                      <button
-                        type="button"
-                        onClick={() => setProfileItem(r)}
-                        className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-[#043666] hover:bg-[#04315C] text-[#E9C170] rounded shadow-sm transition-colors"
-                      >
-                        Lihat Kartu
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  );
+                })
               )}
               {!loading && sortedData.length === 0 && (
                 <tr>
@@ -504,7 +553,6 @@ export function RekapTab() {
           return (
             <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center z-50 p-4">
               <div className="bg-[#F4F6F8] rounded-xl shadow-2xl max-w-xl w-full overflow-hidden border border-slate-300">
-                {/* Header Kartu Profil */}
                 <div className="bg-[#043666] p-6 text-white border-b-4 border-[#E9C170]">
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
@@ -531,7 +579,6 @@ export function RekapTab() {
                   </div>
                 </div>
 
-                {/* Isi Statistik Kehadiran */}
                 <div className="p-6 space-y-4">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-extrabold uppercase tracking-wider text-[#043666]">
@@ -602,7 +649,6 @@ export function RekapTab() {
                   )}
                 </div>
 
-                {/* Tombol Aksi Modal */}
                 <div className="px-6 py-4 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
                   <button
                     type="button"
