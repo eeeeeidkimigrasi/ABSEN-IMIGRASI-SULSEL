@@ -15,8 +15,12 @@ export default function AdminPage() {
   const router = useRouter();
 
   const handleLogout = async () => {
-    await fetch('/api/admin/auth', { method: 'DELETE' });
-    router.push('/admin/login');
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' });
+    } finally {
+      router.push('/admin/login');
+      router.refresh();
+    }
   };
 
   return (

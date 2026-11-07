@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { appendIzin, updateIzinRow, deleteIzinRow } from '@/lib/sheets';
+import { appendIzin, updateIzinRow, deleteIzinRo } from '@/lib/sheets';
 import { getTodayDate, getDayName } from '@/lib/waktu';
 
 const rapikan = (teks: string) => teks.trim().replace(/\s+/g, ' ');
@@ -72,7 +72,9 @@ export async function POST(req: NextRequest) {
     .eq('tanggal', tanggal)
     .maybeSingle();
 
-  // Diizinkan tambah/edit izin walau ada absensi
+  if (absensiConflict) {
+    return NextResponse.json({ error: 'Hapus absensi hari itu dulu' }, { status: 409 });
+  }
 
   const { data: izinConflict } = await supabase
     .from('izin')
@@ -213,7 +215,9 @@ export async function PUT(req: NextRequest) {
       .eq('tanggal', tanggal)
       .maybeSingle();
 
-    // Diizinkan tambah/edit izin walau ada absensi
+    if (absensiConflict) {
+      return NextResponse.json({ error: 'Hapus absensi hari itu dulu' }, { status: 409 });
+    }
   }
 
   const { data: updatedRow, error: updateError } = await supabase

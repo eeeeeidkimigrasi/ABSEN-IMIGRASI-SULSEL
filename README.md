@@ -25,18 +25,31 @@ Urutan di server:
    - Pada **Mode Pulang**: Jika belum absen hadir pagi hari, ditolak. Jika sudah absen pulang sebelumnya, menampilkan jam keluar yang sudah tercatat.
 5. Cek nama baru. Jika kombinasi `nama + universitas` belum pernah terdaftar di database, muncul popup konfirmasi peserta baru yang meminta input **Tanggal Mulai Magang** dan **Tanggal Selesai Magang** (dikirim ulang dengan `konfirmasi_baru: true`).
 6. Simpan ke **Supabase** (database utama), lalu sinkronkan baris ke **Google Sheets** (cadangan di tab bulanan dan `Semua Data`).
-7. Jika pada hari tersebut sudah ada baris izin untuk orang yang sama, data izin otomatis dihapus di Supabase dan Sheets (hadir selalu menang).
-8. Peserta diarahkan ke halaman bukti presensi (`/sukses`) yang menampilkan rincian nama, universitas, tanggal, dan jam tercatat (WITA).
+7. Peserta diarahkan ke halaman bukti presensi (`/sukses`) yang menampilkan rincian nama, universitas, tanggal, dan jam tercatat (WITA).
 
 ### 2. Mode Izin (`/api/izin`)
 - Tanpa validasi lokasi GPS.
 - Field: jenis (`Sakit`, `Izin`, `Lainnya`), keterangan (maks 100 karakter), link surat bukti (opsional, hanya `https://drive.google.com/` atau `https://docs.google.com/`).
 - Tanggal diambil dari server (WITA), sehingga izin hanya berlaku untuk hari berjalan.
-- Ditolak jika hari itu peserta sudah tercatat hadir atau sudah mengirim izin.
+- Tetap diizinkan walau hari itu peserta sudah tercatat hadir. Hanya ditolak jika peserta sudah mengirim izin pada hari yang sama.
+- Saat Mode Pulang, keterangan yang sudah tersimpan saat hadir tidak ditimpa bila kolom keterangan dikosongkan.
 - Popup konfirmasi peserta baru beserta input periode mulai dan selesai magang berlaku sama seperti mode Hadir.
 - Surat izin hanya berupa tautan Google Drive dari peserta; isinya diperiksa oleh pembimbing melalui Dashboard Admin.
 
-### 3. Dashboard Admin (`/admin` & `/admin/login`)
+### 3. Sistem Peringatan (SP) Tidak Absen Pulang
+Deteksi berjalan **otomatis**, tanpa perlu admin. Satu baris absensi dihitung sebagai pelanggaran bila:
+- jam keluar masih kosong dan harinya sudah lewat, atau
+- jam keluar masih kosong dan jam sekarang (WITA) sudah melewati batas jam pulang pada hari itu (default `17:00`, diatur lewat env `BATAS_JAM_PULANG`, format `HH:mm`), atau
+- baris bertanda `[TAP]` (dicentang manual oleh admin).
+
+Peserta yang terlambat absen pulang setelah batas jam tetap bisa absen pulang. Begitu jam keluar terisi, pelanggaran hari itu hilang (kecuali ada tag `[TAP]`). Aturan ini ada di `lib/sp.ts`. Di Dashboard Admin, baris yang kena ditandai **Tidak Absen Pulang**, dan di ekspor CSV kolom jam keluar berisi `TIDAK ABSEN PULANG`.
+
+Pengecekan saat presensi dilakukan di `/api/absen` (hanya hari-hari sebelumnya yang dihitung):
+- **2 pelanggaran (SP-2)**: muncul popup peringatan terakhir. Peserta harus menekan konfirmasi (`ack_sp2`) untuk melanjutkan presensi hadir.
+- **3 pelanggaran (SP-3)**: peserta diblokir untuk presensi hadir dan muncul popup SP-3. Absen pulang tidak diblokir.
+- Admin dapat membuka blokir dari tab **Rekap & Profil** (aksi `unblock_sp`). Sistem mengisi jam keluar yang kosong dengan `16:00` dan menghapus tag `[TAP]`.
+
+### 4. Dashboard Admin (`/admin` & `/admin/login`)
 Dilindungi autentikasi sesi admin, terbagi menjadi 5 tab utama yang membaca langsung dari database Supabase:
 - **Hari Ini**: Menampilkan 4 kartu ringkasan (*Sudah Hadir*, *Belum Pulang*, *Izin / Sakit*, dan *Belum Absen*), daftar kehadiran hari berjalan, daftar peserta yang masih di kantor (belum absen pulang), serta peserta aktif yang belum absen sama sekali.
 - **Rekap & Profil**: Menampilkan total kehadiran, tanggal terakhir hadir, filter peserta aktif (14 hari terakhir), pengaturan periode mulai/selesai magang, ekspor CSV, serta fitur **Kartu Profil Peserta** (dilengkapi progres persentase magang, hitung mundur sisa hari, dan tombol **Unduh PNG** berbasis HTML5 Canvas).
@@ -48,7 +61,13 @@ Dilindungi autentikasi sesi admin, terbagi menjadi 5 tab utama yang membaca lang
 Next.js 14 (App Router, TypeScript, Tailwind CSS), Supabase (Postgres - Database Utama), Google Sheets API (Service Account - Backup Sekunder), Vercel (hosting dan cron).
 
 ## Database (Utama)
-Data operasional utama disimpan di Supabase pada tabel `absensi` dan `izin` (serta penyimpanan periode masa magang peserta). Struktur dasar ada di `setup.sql`.
+Data operasional utama disimpan di Supabase pada tabel berikut:
+- `absensi`: data kehadiran (memuat juga kolom `tgl_mulai` dan `tgl_selesai`).
+- `izin`: data izin / sakit (juga memuat `tgl_mulai` dan `tgl_selesai`).
+- `peserta`: periode magang peserta (`nama_key`, `univ_key`, `tgl_mulai`, `tgl_selesai`), diisi saat peserta baru dikonfirmasi.
+- `admin_log`: riwayat tambah/edit/hapus dari Dashboard Admin (`waktu`, `aksi`, `tabel`, `sebelum`, `sesudah`, `sheets_ok`).
+
+Skrip pembuatan tabel `absensi`, `peserta`, dan `admin_log` tidak disertakan di repositori. Buat sesuai kolom di atas. SQL tabel `izin` ada di bawah.
 
 Aturan penting:
 - Primary key `(nama_key, univ_key, tanggal)`.
@@ -99,4 +118,10 @@ Jika menambah kolom baru lewat kode, tab yang sudah ada di Sheets **tidak beruba
 =QUERY(UNIQUE('Semua Data'!A2:C); "select Col1, Col2, count(Col3), max(Col3) where Col1 is not null group by Col1, Col2 label Col1 'Nama', Col2 'Universitas', count(Col3) 'Jumlah Hadir', max(Col3) 'Terakhir Hadir'"; 0)
 ```
 
-**Aktif** (hanya peserta yang absen dalam 14 hari terakhir). Ketik judul manual di A1:D1 (Nama, Universitas, Jumlah Hadir
+**Aktif** (hanya peserta yang absen dalam 14 hari terakhir). Ketik judul manual di A1:D1 (Nama, Universitas, Jumlah Hadir, Terakhir Hadir), lalu isi sel A2:
+
+```text
+=QUERY(Rekap!A2:D; "select A, B, C, D where D >= date '"&TEXT(TODAY()-14; "yyyy-mm-dd")&"'"; 0)
+```
+
+Tab ini bergantung pada tab **Rekap** di atas.

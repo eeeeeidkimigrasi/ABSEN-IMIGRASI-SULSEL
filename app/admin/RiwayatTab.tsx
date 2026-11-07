@@ -294,7 +294,7 @@ export function RiwayatTab() {
               ) : (
                 data.map((r, i) => {
                   const rawKet = String(r.keterangan || '');
-                  const hasTap = rawKet.includes('[TAP]') || (r.tanggal < todayStr && !r.jam_keluar);
+                  const hasTap = Boolean(r.tap) || rawKet.includes('[TAP]') || (r.tanggal < todayStr && !r.jam_keluar);
                   const cleanKet = rawKet.replace(/\[TAP\]/g, '').trim();
 
                   return (

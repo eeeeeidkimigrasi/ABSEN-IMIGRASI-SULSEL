@@ -191,11 +191,6 @@ export default function AbsenPage() {
         });
         const data = await res.json();
 
-        if (data.status === 'sudah_hadir') {
-          setLoading(false);
-          setStatusMsg('Anda sudah tercatat hadir hari ini, pengajuan izin tidak dapat diproses.');
-          return;
-        }
         if (data.status === 'sudah_izin') {
           setLoading(false);
           setStatusMsg('Laporan izin Anda untuk hari ini sudah tercatat di sistem.');

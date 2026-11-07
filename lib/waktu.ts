@@ -18,6 +18,26 @@ export function getTodayDate(): string {
 }
 
 /**
+ * Mengembalikan jam saat ini dalam format HH:mm (WITA).
+ */
+export function getNowTime(): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date());
+}
+
+/**
+ * Mengembalikan tanggal (YYYY-MM-DD, basis WITA) sejumlah `days` hari sebelum hari ini.
+ */
+export function getDateDaysAgo(days: number): string {
+  const [y, m, d] = getTodayDate().split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d - days)).toISOString().slice(0, 10);
+}
+
+/**
  * Mengembalikan bulan dan tahun dalam format YYYY-MM (WITA).
  */
 export function getThisMonth(): string {

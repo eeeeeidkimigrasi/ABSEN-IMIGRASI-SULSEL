@@ -3,11 +3,10 @@ import { supabase } from '@/lib/supabase';
 import { syncAbsenRow, appendIzin } from '@/lib/sheets';
 import { getDayName } from '@/lib/waktu';
 
-const CRON_SECRET = process.env.CRON_SECRET!;
-
 export async function GET(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
   const auth = req.headers.get('authorization');
-  if (!auth || auth !== `Bearer ${CRON_SECRET}`) {
+  if (!cronSecret || !auth || auth !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
 

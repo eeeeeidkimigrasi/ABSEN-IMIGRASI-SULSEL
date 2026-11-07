@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getDateDaysAgo } from '@/lib/waktu';
+import { getSpContext, isTidakAbsenPulang, stripTapTag } from '@/lib/sp';
 
 const MAX_ROWS = 20000;
 const ACTIVE_DAYS = 14;
@@ -39,9 +41,7 @@ export async function GET(req: NextRequest) {
     if (!data) return new Response('No data', { status: 404 });
 
     const rekapMap = new Map<string, { nama: string; universitas: string; count: number; terakhir: string; tgl_mulai: string; tgl_selesai: string }>();
-    const threshold = new Date();
-    threshold.setDate(threshold.getDate() - ACTIVE_DAYS);
-    const thresholdStr = threshold.toISOString().split('T')[0];
+    const thresholdStr = getDateDaysAgo(ACTIVE_DAYS);
 
     for (const row of data as any[]) {
       const key = `${row.nama_key}|${row.univ_key}`;
@@ -132,8 +132,8 @@ export async function GET(req: NextRequest) {
         tanggal: a.tanggal || '',
         status: 'HADIR',
         masuk: a.jam_masuk || '-',
-        keluar: a.jam_keluar || '-',
-        ket: a.keterangan || '-',
+        keluar: a.jam_keluar || (isTidakAbsenPulang(a, getSpContext()) ? 'TIDAK ABSEN PULANG' : '-'),
+        ket: stripTapTag(a.keterangan) || '-',
         surat: '-',
       });
     }
@@ -169,9 +169,11 @@ export async function GET(req: NextRequest) {
     const { data } = await query.order('tanggal', { ascending: false }).limit(MAX_ROWS);
     if (!data) return new Response('No data', { status: 404 });
 
+    const spCtx = getSpContext();
     csvContent = '\uFEFFTANGGAL,NAMA,UNIVERSITAS,JAM MASUK,JAM KELUAR,KETERANGAN\n';
     data.forEach(r => {
-      csvContent += `${r.tanggal},${escapeCSV(r.nama)},${escapeCSV(r.universitas)},${r.jam_masuk},${r.jam_keluar},${escapeCSV(r.keterangan)}\n`;
+      const jamKeluar = r.jam_keluar ? r.jam_keluar : isTidakAbsenPulang(r, spCtx) ? 'TIDAK ABSEN PULANG' : '-';
+      csvContent += `${r.tanggal},${escapeCSV(r.nama)},${escapeCSV(r.universitas)},${escapeCSV(r.jam_masuk)},${escapeCSV(jamKeluar)},${escapeCSV(stripTapTag(r.keterangan))}\n`;
     });
   } else if (tipe === 'izin') {
     const start = searchParams.get('start')?.slice(0, 10);

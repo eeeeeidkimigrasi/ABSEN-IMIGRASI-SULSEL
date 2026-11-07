@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { appendAbsen, updateJamKeluarRow } from '@/lib/sheets';
 import { jarakMeter } from '@/lib/geo';
 import { getTodayDate, getDayName } from '@/lib/waktu';
+import { getSpContext, isTidakAbsenPulang } from '@/lib/sp';
 
 const OFFICE_LAT = Number(process.env.OFFICE_LAT);
 const OFFICE_LNG = Number(process.env.OFFICE_LNG);
@@ -86,16 +87,17 @@ export async function POST(req: NextRequest) {
     .eq('nama_key', nama_key)
     .eq('univ_key', univ_key);
 
+  // Baris hari ini tidak dihitung di sini agar peserta yang terlambat absen pulang
+  // (setelah batas jam) tetap bisa menyelesaikan presensinya.
+  const spCtx = getSpContext();
   let spCount = 0;
   for (const r of pastRows || []) {
-    const hasTap = typeof r.keterangan === 'string' && r.keterangan.includes('[TAP]');
-    const isPastUnclosed = r.tanggal < tanggal && !r.jam_keluar;
-    if (hasTap || isPastUnclosed) {
+    if (isTidakAbsenPulang(r, spCtx, { hariIniMelewatiBatas: false })) {
       spCount++;
     }
   }
 
-  if (spCount >= 3) {
+  if (mode === 'hadir' && spCount >= 3) {
     return NextResponse.json({ status: 'sp3_blocked', sp_count: spCount });
   }
 
@@ -220,13 +222,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'jam_tidak_valid' });
     }
 
+    const updatePayload: { jam_keluar: string; synced_to_sheets: boolean; keterangan?: string } = {
+      jam_keluar,
+      synced_to_sheets: false,
+    };
+    if (keterangan) updatePayload.keterangan = keterangan;
+
     const { error: updateError } = await supabase
       .from('absensi')
-      .update({
-        jam_keluar,
-        keterangan,
-        synced_to_sheets: false,
-      })
+      .update(updatePayload)
       .eq('nama_key', nama_key)
       .eq('univ_key', univ_key)
       .eq('tanggal', tanggal);

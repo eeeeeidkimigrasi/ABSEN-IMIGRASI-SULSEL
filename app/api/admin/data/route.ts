@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getTodayDate } from '@/lib/waktu';
+import { getTodayDate, getDateDaysAgo } from '@/lib/waktu';
+import { getSpContext, isTidakAbsenPulang, stripTapTag } from '@/lib/sp';
 
 const ACTIVE_DAYS = 14;
 
@@ -46,9 +47,7 @@ async function handleSummary() {
     .select('nama, universitas, jenis, keterangan, link_surat')
     .eq('tanggal', tanggal);
 
-  const thresholdDate = new Date();
-  thresholdDate.setDate(thresholdDate.getDate() - ACTIVE_DAYS);
-  const thresholdStr = thresholdDate.toISOString().split('T')[0];
+  const thresholdStr = getDateDaysAgo(ACTIVE_DAYS);
 
   const { data: aktif } = await supabase
     .from('absensi')
@@ -68,13 +67,25 @@ async function handleSummary() {
     .order('waktu', { ascending: false })
     .limit(50);
 
-  return NextResponse.json({ hadir: hadir || [], izin: izin || [], belum, logs: logsData || [] });
+  const spCtx = getSpContext();
+  const hadirDenganSp = (hadir || []).map((h) => ({
+    ...h,
+    tap: isTidakAbsenPulang({ tanggal, jam_keluar: h.jam_keluar, keterangan: h.keterangan }, spCtx),
+  }));
+
+  return NextResponse.json({
+    hadir: hadirDenganSp,
+    izin: izin || [],
+    belum,
+    logs: logsData || [],
+    batas_jam_pulang: spCtx.batas,
+  });
 }
 
 async function handleRekap(params: URLSearchParams) {
   const search = params.get('q')?.slice(0, 80) || '';
   const onlyActive = params.get('active') === 'true';
-  const todayStr = getTodayDate();
+  const spCtx = getSpContext();
 
   let query = supabase
     .from('absensi')
@@ -115,9 +126,6 @@ async function handleRekap(params: URLSearchParams) {
     }
   >();
 
-  const now = new Date();
-  const threshold = new Date();
-  threshold.setDate(now.getDate() - ACTIVE_DAYS);
 
   for (const row of data as any[]) {
     const key = `${row.nama_key}|${row.univ_key}`;
@@ -134,9 +142,7 @@ async function handleRekap(params: URLSearchParams) {
     };
     entry.count++;
 
-    const hasTapTag = typeof row.keterangan === 'string' && row.keterangan.includes('[TAP]');
-    const isPastUnclosed = row.tanggal < todayStr && !row.jam_keluar;
-    if (hasTapTag || isPastUnclosed) {
+    if (isTidakAbsenPulang(row, spCtx)) {
       entry.spCount++;
     }
 
@@ -149,7 +155,7 @@ async function handleRekap(params: URLSearchParams) {
   let result = Array.from(rekapMap.values());
 
   if (onlyActive) {
-    const thresholdStr = threshold.toISOString().split('T')[0];
+    const thresholdStr = getDateDaysAgo(ACTIVE_DAYS);
     result = result.filter((r) => r.terakhir >= thresholdStr);
   }
 
@@ -179,7 +185,10 @@ async function handleRiwayat(params: URLSearchParams) {
     .order('jam_masuk', { ascending: false })
     .range(from, to);
 
-  return NextResponse.json({ data: data || [], total: count || 0 });
+  const spCtx = getSpContext();
+  const rows = (data || []).map((r: any) => ({ ...r, tap: isTidakAbsenPulang(r, spCtx) }));
+
+  return NextResponse.json({ data: rows, total: count || 0 });
 }
 
 async function handleIzin(params: URLSearchParams) {
@@ -204,7 +213,7 @@ export async function POST(req: NextRequest) {
     if (body.action === 'unblock_sp') {
       const nama_key = (body.nama || '').trim().toLowerCase();
       const univ_key = (body.universitas || '').trim().toLowerCase();
-      const todayStr = getTodayDate();
+      const spCtx = getSpContext();
 
       if (!nama_key || !univ_key) {
         return NextResponse.json({ ok: false, error: 'Nama dan universitas wajib diisi.' }, { status: 400 });
@@ -217,10 +226,8 @@ export async function POST(req: NextRequest) {
         .eq('univ_key', univ_key);
 
       for (const r of rows || []) {
-        const hasTap = typeof r.keterangan === 'string' && r.keterangan.includes('[TAP]');
-        const isPastNull = r.tanggal < todayStr && !r.jam_keluar;
-        if (hasTap || isPastNull) {
-          const cleanKet = r.keterangan ? r.keterangan.replace(/\[TAP\]/g, '').trim() || null : null;
+        if (isTidakAbsenPulang(r, spCtx)) {
+          const cleanKet = stripTapTag(r.keterangan) || null;
           await supabase
             .from('absensi')
             .update({

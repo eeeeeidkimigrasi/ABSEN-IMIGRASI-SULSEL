@@ -84,11 +84,15 @@ export function HariIniTab() {
                       <span className="inline-block px-2.5 py-1 text-xs font-bold rounded bg-slate-100 text-slate-800 border border-slate-300">
                         {String(h.jam_keluar).slice(0, 5)}
                       </span>
+                    ) : h.tap ? (
+                      <span className="inline-block px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded bg-red-100 text-red-800 border border-red-300">
+                        Tidak Absen Pulang (SP)
+                      </span>
                     ) : (
                       <span className="text-xs font-semibold text-amber-700">Belum Pulang</span>
                     )}
                   </td>
-                  <td className="px-5 py-3.5 text-slate-600">{h.keterangan || '-'}</td>
+                  <td className="px-5 py-3.5 text-slate-600">{String(h.keterangan || '').replace(/\[TAP\]/g, '').trim() || '-'}</td>
                 </tr>
               ))}
               {data.hadir.length === 0 && (
