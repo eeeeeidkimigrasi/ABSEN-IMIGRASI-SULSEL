@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { appendIzin, updateIzinRow, deleteIzinRo } from '@/lib/sheets';
+import { appendIzin, updateIzinRow, deleteIzinRow } from '@/lib/sheets';
 import { getTodayDate, getDayName } from '@/lib/waktu';
 
 const rapikan = (teks: string) => teks.trim().replace(/\s+/g, ' ');
