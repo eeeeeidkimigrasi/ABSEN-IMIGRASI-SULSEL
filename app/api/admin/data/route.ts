@@ -1,63 +1,86 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getTodayDate, getDateDaysAgo } from '@/lib/waktu';
-import { getSpContext, isTidakAbsenPulang, stripTapTag } from '@/lib/sp';
+import { getTodayDate } from '@/lib/waktu';
+import { fetchAll } from '@/lib/fetch-all';
 
 const ACTIVE_DAYS = 14;
+const BATAS_JAM_PULANG = '18:00';
+
+function getCurrentTimeWita(): string {
+  const wita = new Date(Date.now() + 8 * 3600 * 1000);
+  return wita.toISOString().slice(11, 16);
+}
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = req.nextUrl;
-  const tipe = searchParams.get('tipe');
+  try {
+    const { searchParams } = req.nextUrl;
+    const tipe = searchParams.get('tipe');
 
-  if (tipe === 'summary') {
-    return handleSummary();
-  } else if (tipe === 'rekap') {
-    return handleRekap(searchParams);
-  } else if (tipe === 'riwayat') {
-    return handleRiwayat(searchParams);
-  } else if (tipe === 'izin') {
-    return handleIzin(searchParams);
-  } else if (tipe === 'log') {
-    return handleLog();
+    if (tipe === 'summary') {
+      return await handleSummary();
+    } else if (tipe === 'rekap') {
+      return await handleRekap(searchParams);
+    } else if (tipe === 'riwayat') {
+      return await handleRiwayat(searchParams);
+    } else if (tipe === 'izin') {
+      return await handleIzin(searchParams);
+    } else if (tipe === 'log') {
+      return await handleLog();
+    }
+
+    return NextResponse.json({ error: 'Tipe tidak valid' }, { status: 400 });
+  } catch (err: any) {
+    console.error('API Admin Data Error:', err);
+    return NextResponse.json({ error: err?.message || 'Gagal memuat data dari database.' }, { status: 500 });
   }
-
-  return NextResponse.json({ error: 'Tipe tidak valid' }, { status: 400 });
 }
 
 async function handleLog() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('admin_log')
     .select('id, waktu, aksi, tabel, sebelum, sesudah, sheets_ok')
     .order('waktu', { ascending: false })
     .limit(50);
+
+  if (error) throw new Error(error.message);
   return NextResponse.json(data || []);
 }
 
 async function handleSummary() {
   const tanggal = getTodayDate();
 
-  const { data: hadir } = await supabase
+  const { data: hadir, error: errHadir } = await supabase
     .from('absensi')
     .select('nama, universitas, jam_masuk, jam_keluar, keterangan')
     .eq('tanggal', tanggal)
     .order('jam_masuk', { ascending: false });
+  if (errHadir) throw new Error(errHadir.message);
 
-  const { data: izin } = await supabase
+  const { data: izin, error: errIzin } = await supabase
     .from('izin')
     .select('nama, universitas, jenis, keterangan, link_surat')
     .eq('tanggal', tanggal);
+  if (errIzin) throw new Error(errIzin.message);
 
-  const thresholdStr = getDateDaysAgo(ACTIVE_DAYS);
+  const thresholdDate = new Date();
+  thresholdDate.setDate(thresholdDate.getDate() - ACTIVE_DAYS);
+  const thresholdStr = thresholdDate.toISOString().split('T')[0];
 
-  const { data: aktif } = await supabase
-    .from('absensi')
-    .select('nama, universitas, nama_key, univ_key')
-    .gte('tanggal', thresholdStr);
+  const aktif = await fetchAll<any>((from, to) =>
+    supabase
+      .from('absensi')
+      .select('nama, universitas, nama_key, univ_key')
+      .gte('tanggal', thresholdStr)
+      .order('tanggal', { ascending: false })
+      .order('nama_key', { ascending: true })
+      .order('univ_key', { ascending: true })
+      .range(from, to)
+  );
 
-  const uniqueAktif = Array.from(new Map(aktif?.map((a) => [`${a.nama_key}|${a.univ_key}`, a])).values());
+  const uniqueAktif = Array.from(new Map(aktif.map((a) => [`${a.nama_key}|${a.univ_key}`, a])).values());
 
-  const hadirKeys = new Set(hadir?.map((h) => `${h.nama.toLowerCase().trim()}|${h.universitas.toLowerCase().trim()}`));
-  const izinKeys = new Set(izin?.map((i) => `${i.nama.toLowerCase().trim()}|${i.universitas.toLowerCase().trim()}`));
+  const hadirKeys = new Set((hadir || []).map((h) => `${h.nama.toLowerCase().trim()}|${h.universitas.toLowerCase().trim()}`));
+  const izinKeys = new Set((izin || []).map((i) => `${i.nama.toLowerCase().trim()}|${i.universitas.toLowerCase().trim()}`));
 
   const belum = uniqueAktif.filter((a) => !hadirKeys.has(`${a.nama_key}|${a.univ_key}`) && !izinKeys.has(`${a.nama_key}|${a.univ_key}`));
 
@@ -67,44 +90,43 @@ async function handleSummary() {
     .order('waktu', { ascending: false })
     .limit(50);
 
-  const spCtx = getSpContext();
-  const hadirDenganSp = (hadir || []).map((h) => ({
-    ...h,
-    tap: isTidakAbsenPulang({ tanggal, jam_keluar: h.jam_keluar, keterangan: h.keterangan }, spCtx),
-  }));
-
-  return NextResponse.json({
-    hadir: hadirDenganSp,
-    izin: izin || [],
-    belum,
-    logs: logsData || [],
-    batas_jam_pulang: spCtx.batas,
-  });
+  return NextResponse.json({ hadir: hadir || [], izin: izin || [], belum, logs: logsData || [] });
 }
 
 async function handleRekap(params: URLSearchParams) {
   const search = params.get('q')?.slice(0, 80) || '';
   const onlyActive = params.get('active') === 'true';
-  const spCtx = getSpContext();
+  const todayStr = getTodayDate();
+  const jamSekarang = getCurrentTimeWita();
 
-  let query = supabase
-    .from('absensi')
-    .select('nama, universitas, tanggal, jam_keluar, keterangan, nama_key, univ_key, tgl_mulai, tgl_selesai');
+  const data = await fetchAll<any>((from, to) => {
+    let q = supabase
+      .from('absensi')
+      .select('nama, universitas, tanggal, jam_keluar, keterangan, nama_key, univ_key, tgl_mulai, tgl_selesai');
+    if (search) q = q.ilike('nama', `%${search}%`);
+    return q
+      .order('tanggal', { ascending: true })
+      .order('nama_key', { ascending: true })
+      .order('univ_key', { ascending: true })
+      .range(from, to);
+  });
 
-  if (search) {
-    query = query.ilike('nama', `%${search}%`);
-  }
-
-  const { data } = await query;
-  if (!data) return NextResponse.json([]);
-
-  const { data: izinData } = await supabase
-    .from('izin')
-    .select('nama_key, univ_key, tgl_mulai, tgl_selesai');
+  const izinData = await fetchAll<any>((from, to) =>
+    supabase
+      .from('izin')
+      .select('nama_key, univ_key, tanggal, tgl_mulai, tgl_selesai')
+      .order('tanggal', { ascending: true })
+      .order('nama_key', { ascending: true })
+      .order('univ_key', { ascending: true })
+      .range(from, to)
+  );
 
   const izinCountMap = new Map<string, { count: number; tgl_mulai: string | null; tgl_selesai: string | null }>();
-  for (const iz of (izinData || []) as any[]) {
+  const izinDateSet = new Set<string>();
+
+  for (const iz of izinData) {
     const k = `${iz.nama_key}|${iz.univ_key}`;
+    izinDateSet.add(`${k}|${iz.tanggal}`);
     const cur = izinCountMap.get(k) || { count: 0, tgl_mulai: null, tgl_selesai: null };
     cur.count++;
     if (iz.tgl_mulai && !cur.tgl_mulai) cur.tgl_mulai = iz.tgl_mulai;
@@ -126,8 +148,11 @@ async function handleRekap(params: URLSearchParams) {
     }
   >();
 
+  const now = new Date();
+  const threshold = new Date();
+  threshold.setDate(now.getDate() - ACTIVE_DAYS);
 
-  for (const row of data as any[]) {
+  for (const row of data) {
     const key = `${row.nama_key}|${row.univ_key}`;
     const izInfo = izinCountMap.get(key);
     const entry = rekapMap.get(key) || {
@@ -142,8 +167,19 @@ async function handleRekap(params: URLSearchParams) {
     };
     entry.count++;
 
-    if (isTidakAbsenPulang(row, spCtx)) {
-      entry.spCount++;
+    const ket = String(row.keterangan || '');
+    const hasIzinSameDay = izinDateSet.has(`${key}|${row.tanggal}`);
+
+    // Aturan: jika tidak di-reset dan tidak sedang izin di tanggal tersebut
+    if (!ket.includes('[RESET]')) {
+      const hasTapTag = ket.includes('[TAP]');
+      const isPastUnclosed = row.tanggal < todayStr && !row.jam_keluar && !hasIzinSameDay;
+      const isTodayLateUnclosed =
+        row.tanggal === todayStr && !row.jam_keluar && jamSekarang >= BATAS_JAM_PULANG && !hasIzinSameDay;
+
+      if (hasTapTag || isPastUnclosed || isTodayLateUnclosed) {
+        entry.spCount++;
+      }
     }
 
     if (row.tanggal > entry.terakhir) entry.terakhir = row.tanggal;
@@ -155,7 +191,7 @@ async function handleRekap(params: URLSearchParams) {
   let result = Array.from(rekapMap.values());
 
   if (onlyActive) {
-    const thresholdStr = getDateDaysAgo(ACTIVE_DAYS);
+    const thresholdStr = threshold.toISOString().split('T')[0];
     result = result.filter((r) => r.terakhir >= thresholdStr);
   }
 
@@ -180,60 +216,70 @@ async function handleRiwayat(params: URLSearchParams) {
   const from = (page - 1) * size;
   const to = from + size - 1;
 
-  const { data, count } = await query
+  const { data, count, error } = await query
     .order('tanggal', { ascending: false })
     .order('jam_masuk', { ascending: false })
     .range(from, to);
 
-  const spCtx = getSpContext();
-  const rows = (data || []).map((r: any) => ({ ...r, tap: isTidakAbsenPulang(r, spCtx) }));
+  if (error) throw new Error(error.message);
 
-  return NextResponse.json({ data: rows, total: count || 0 });
+  return NextResponse.json({ data: data || [], total: count || 0 });
 }
 
 async function handleIzin(params: URLSearchParams) {
   const start = params.get('start')?.slice(0, 10);
   const end = params.get('end')?.slice(0, 10);
 
-  let query = supabase.from('izin').select('*');
+  const data = await fetchAll<any>((from, to) => {
+    let q = supabase.from('izin').select('*');
+    if (start) q = q.gte('tanggal', start);
+    if (end) q = q.lte('tanggal', end);
+    return q
+      .order('tanggal', { ascending: false })
+      .order('nama_key', { ascending: true })
+      .order('univ_key', { ascending: true })
+      .range(from, to);
+  });
 
-  if (start) query = query.gte('tanggal', start);
-  if (end) query = query.lte('tanggal', end);
-
-  const { data } = await query.order('tanggal', { ascending: false });
-
-  return NextResponse.json(data || []);
+  return NextResponse.json(data);
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // Aksi Buka Blokir SP-3
+    // Aksi Buka Blokir SP-3: jam_keluar tetap kosong (-), hanya membersihkan/memutihkan status SP
     if (body.action === 'unblock_sp') {
       const nama_key = (body.nama || '').trim().toLowerCase();
       const univ_key = (body.universitas || '').trim().toLowerCase();
-      const spCtx = getSpContext();
 
       if (!nama_key || !univ_key) {
         return NextResponse.json({ ok: false, error: 'Nama dan universitas wajib diisi.' }, { status: 400 });
       }
 
-      const { data: rows } = await supabase
-        .from('absensi')
-        .select('tanggal, jam_keluar, keterangan')
-        .eq('nama_key', nama_key)
-        .eq('univ_key', univ_key);
+      const rows = await fetchAll<any>((from, to) =>
+        supabase
+          .from('absensi')
+          .select('tanggal, jam_keluar, keterangan')
+          .eq('nama_key', nama_key)
+          .eq('univ_key', univ_key)
+          .order('tanggal', { ascending: true })
+          .range(from, to)
+      );
 
-      for (const r of rows || []) {
-        if (isTidakAbsenPulang(r, spCtx)) {
-          const cleanKet = stripTapTag(r.keterangan) || null;
+      for (const r of rows) {
+        const ket = String(r.keterangan || '');
+        const hasTap = ket.includes('[TAP]');
+        const isNullExit = !r.jam_keluar;
+        if (hasTap || isNullExit) {
+          const baseKet = ket.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').trim();
+          const newKet = isNullExit
+            ? (baseKet ? `${baseKet} [RESET]` : '[RESET]')
+            : (baseKet || null);
+
           await supabase
             .from('absensi')
-            .update({
-              jam_keluar: r.jam_keluar || '16:00',
-              keterangan: cleanKet,
-            })
+            .update({ keterangan: newKet })
             .eq('nama_key', nama_key)
             .eq('univ_key', univ_key)
             .eq('tanggal', r.tanggal);

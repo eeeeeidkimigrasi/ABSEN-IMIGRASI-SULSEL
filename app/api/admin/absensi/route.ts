@@ -4,7 +4,7 @@ import { appendAbsen, updateAbsenRow, deleteAbsenRows } from '@/lib/sheets';
 import { getTodayDate, getDayName } from '@/lib/waktu';
 
 const rapikan = (teks: string) => teks.trim().replace(/\s+/g, ' ');
-const stripTapTag = (ket: string | null) => (ket ? ket.replace(/\[TAP\]/g, '').trim() : '');
+const stripTapTag = (ket: string | null) => (ket ? ket.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').replace(/\[RESET\]/g, '').trim() : '');
 
 const validateDate = (date: string) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   const jam_masuk = body.jam_masuk?.trim();
   const jam_keluar = body.jam_keluar?.trim() || null;
   const tidak_absen_pulang = Boolean(body.tidak_absen_pulang);
-  const rawKet = body.keterangan ? rapikan(String(body.keterangan).replace(/\[TAP\]/g, '')).slice(0, 90) : '';
+  const rawKet = body.keterangan ? rapikan(String(body.keterangan).replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '')).slice(0, 90) : '';
   const keterangan = tidak_absen_pulang ? (rawKet ? `${rawKet} [TAP]` : '[TAP]') : (rawKet || null);
 
   if (!nama || !universitas || !tanggal || !jam_masuk || !validateDate(tanggal) || (jam_keluar !== null && jam_keluar < jam_masuk)) {
@@ -124,7 +124,7 @@ export async function PUT(req: NextRequest) {
   const jam_masuk = body.jam_masuk?.trim();
   const jam_keluar = body.jam_keluar?.trim() || null;
   const tidak_absen_pulang = Boolean(body.tidak_absen_pulang);
-  const rawKet = body.keterangan ? rapikan(String(body.keterangan).replace(/\[TAP\]/g, '')).slice(0, 90) : '';
+  const rawKet = body.keterangan ? rapikan(String(body.keterangan).replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '')).slice(0, 90) : '';
   const keterangan = tidak_absen_pulang ? (rawKet ? `${rawKet} [TAP]` : '[TAP]') : (rawKet || null);
 
   if (!oldNama || !oldUniv || !oldTanggal || !nama || !universitas || !tanggal || !jam_masuk || !validateDate(tanggal) || (jam_keluar !== null && jam_keluar < jam_masuk)) {

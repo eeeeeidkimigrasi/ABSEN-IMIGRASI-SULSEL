@@ -3,14 +3,20 @@ import { supabase } from '@/lib/supabase';
 import { appendAbsen, updateJamKeluarRow } from '@/lib/sheets';
 import { jarakMeter } from '@/lib/geo';
 import { getTodayDate, getDayName } from '@/lib/waktu';
-import { getSpContext, isTidakAbsenPulang } from '@/lib/sp';
+import { fetchAll } from '@/lib/fetch-all';
 
 const OFFICE_LAT = Number(process.env.OFFICE_LAT);
 const OFFICE_LNG = Number(process.env.OFFICE_LNG);
 const RADIUS_METER = Number(process.env.RADIUS_METER || 150);
+const BATAS_JAM_PULANG = '18:00';
 
 if (isNaN(OFFICE_LAT) || isNaN(OFFICE_LNG)) {
   throw new Error('OFFICE_LAT and OFFICE_LNG must be set');
+}
+
+function getCurrentTimeWita(): string {
+  const wita = new Date(Date.now() + 8 * 3600 * 1000);
+  return wita.toISOString().slice(11, 16);
 }
 
 const ipHits = new Map<string, { count: number; resetAt: number }>();
@@ -67,6 +73,7 @@ export async function POST(req: NextRequest) {
   const akurasi_gps = body.akurasi_gps;
   const keterangan = body.keterangan ? rapikan(body.keterangan).slice(0, 100) : null;
   const tanggal = getTodayDate();
+  const jamSekarang = getCurrentTimeWita();
   const nama_key = nama.toLowerCase().trim();
   const univ_key = universitas.toLowerCase().trim();
 
@@ -80,25 +87,54 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Lokasi tidak terbaca.' }, { status: 400 });
   }
 
-  // Cek akumulasi SP (Tidak absen pulang) untuk peserta ini
-  const { data: pastRows } = await supabase
-    .from('absensi')
-    .select('tanggal, jam_keluar, keterangan')
-    .eq('nama_key', nama_key)
-    .eq('univ_key', univ_key);
+  // Ambil seluruh riwayat absensi & izin milik peserta ini menggunakan fetchAll
+  const pastRows = await fetchAll<any>((from, to) =>
+    supabase
+      .from('absensi')
+      .select('tanggal, jam_keluar, keterangan')
+      .eq('nama_key', nama_key)
+      .eq('univ_key', univ_key)
+      .order('tanggal', { ascending: true })
+      .range(from, to)
+  );
 
-  // Baris hari ini tidak dihitung di sini agar peserta yang terlambat absen pulang
-  // (setelah batas jam) tetap bisa menyelesaikan presensinya.
-  const spCtx = getSpContext();
+  const pastIzin = await fetchAll<any>((from, to) =>
+    supabase
+      .from('izin')
+      .select('tanggal')
+      .eq('nama_key', nama_key)
+      .eq('univ_key', univ_key)
+      .order('tanggal', { ascending: true })
+      .range(from, to)
+  );
+
+  const izinTanggalSet = new Set(pastIzin.map((iz) => iz.tanggal));
+
   let spCount = 0;
-  for (const r of pastRows || []) {
-    if (isTidakAbsenPulang(r, spCtx, { hariIniMelewatiBatas: false })) {
+  for (const r of pastRows) {
+    const ket = String(r.keterangan || '');
+    if (ket.includes('[RESET]')) continue;
+    const hasIzinSameDay = izinTanggalSet.has(r.tanggal);
+    const hasTap = ket.includes('[TAP]');
+    const isPastUnclosed = r.tanggal < tanggal && !r.jam_keluar && !hasIzinSameDay;
+    const isTodayLateUnclosed = r.tanggal === tanggal && !r.jam_keluar && jamSekarang >= BATAS_JAM_PULANG && !hasIzinSameDay;
+    if (hasTap || isPastUnclosed || isTodayLateUnclosed) {
       spCount++;
     }
   }
 
-  if (mode === 'hadir' && spCount >= 3) {
+  if (spCount >= 3) {
     return NextResponse.json({ status: 'sp3_blocked', sp_count: spCount });
+  }
+
+  if (mode === 'pulang' && jamSekarang >= BATAS_JAM_PULANG) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `Batas waktu presensi pulang mandiri (${BATAS_JAM_PULANG} WITA) telah berakhir. Hari ini tercatat Tidak Absen Pulang (SP).`,
+      },
+      { status: 403 }
+    );
   }
 
   if (mode === 'hadir' && spCount === 2 && !body.ack_sp2) {
@@ -119,19 +155,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Jam masuk wajib diisi.' }, { status: 400 });
     }
 
-    const { count: absensiAny } = await supabase
-      .from('absensi')
-      .select('*', { count: 'exact', head: true })
-      .eq('nama_key', nama_key)
-      .eq('univ_key', univ_key);
-
-    const { count: izinAny } = await supabase
-      .from('izin')
-      .select('*', { count: 'exact', head: true })
-      .eq('nama_key', nama_key)
-      .eq('univ_key', univ_key);
-
-    if ((!absensiAny || absensiAny === 0) && (!izinAny || izinAny === 0)) {
+    if (pastRows.length === 0 && pastIzin.length === 0) {
       if (!body.konfirmasi_baru) {
         return NextResponse.json({ status: 'nama_baru' });
       }
@@ -222,15 +246,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'jam_tidak_valid' });
     }
 
-    const updatePayload: { jam_keluar: string; synced_to_sheets: boolean; keterangan?: string } = {
-      jam_keluar,
-      synced_to_sheets: false,
-    };
-    if (keterangan) updatePayload.keterangan = keterangan;
-
     const { error: updateError } = await supabase
       .from('absensi')
-      .update(updatePayload)
+      .update({
+        jam_keluar,
+        keterangan,
+        synced_to_sheets: false,
+      })
       .eq('nama_key', nama_key)
       .eq('univ_key', univ_key)
       .eq('tanggal', tanggal);
