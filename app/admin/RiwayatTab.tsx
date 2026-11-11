@@ -317,7 +317,7 @@ export function RiwayatTab() {
                             <span className="text-slate-400">-</span>
                           )}
                           {hasTap && (
-                            <span className="inline-block px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded bg-amber-100 text-amber-900 border border-amber-300">
+                            <span className="inline-block px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded bg-red-100 text-red-800 border border-red-300">
                               Tidak Absen Pulang
                             </span>
                           )}
