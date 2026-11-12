@@ -42,7 +42,7 @@ function generateDateRange(startStr: string, endStr: string): string[] {
 }
 
 // Mengambil daftar Hari Libur Nasional / Cuti Bersama yang disimpan Admin
-async function getCustomHolidaysMap(): Promise> {
+async function getCustomHolidaysMap() {
   const { data } = await supabase
     .from('admin_log')
     .select('id, aksi, sesudah')

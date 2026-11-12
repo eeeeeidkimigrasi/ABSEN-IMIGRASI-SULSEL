@@ -40,7 +40,7 @@ function generateDateRange(startStr: string, endStr: string): string[] {
   return dates;
 }
 
-async function getCustomHolidaysMap(): Promise> {
+async function getCustomHolidaysMap() {
   const { data } = await supabase
     .from('admin_log')
     .select('id, aksi, sesudah')
@@ -64,7 +64,8 @@ function escapeCSV(val: any): string {
   let str = String(val)
     .replace(/\[TAP\]/g, '')
     .replace(/\[RESET\]/g, '')
-    .replace(/\[AUTO\]/g, '').replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '')
+    .replace(/\[AUTO\]/g, '')
+    .replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '')
     .trim();
 
   if (/^[=+-@\t\r]/.test(str)) {
@@ -126,6 +127,8 @@ export async function GET(req: NextRequest) {
       const nama = rawNama.toLowerCase();
       const univ = rawUniv.toLowerCase();
 
+      const customHolidays = await getCustomHolidaysMap();
+
       const absensiRows = await fetchAll<any>((from, to) =>
         supabase
           .from('absensi')
@@ -136,7 +139,6 @@ export async function GET(req: NextRequest) {
           .range(from, to)
       );
 
-      const customHolidays = await getCustomHolidaysMap();
       const izinRows = await fetchAll<any>((from, to) =>
         supabase
           .from('izin')
@@ -194,7 +196,7 @@ export async function GET(req: NextRequest) {
         } else if (iz) {
           csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},IZIN (${escapeCSV(iz.jenis)}),-,-,${escapeCSV(iz.keterangan)}\n`;
         } else if (liburNas) {
-          csvContent += ${d},,,,LIBUR NASIONAL,-,-,\n;
+          csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},LIBUR NASIONAL,-,-,${escapeCSV(liburNas)}\n`;
         } else if (libur) {
           csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},LIBUR,-,-,Libur (Jumat / Akhir Pekan)\n`;
         } else if (d === todayStr && jamSekarang < BATAS_JAM_PULANG) {

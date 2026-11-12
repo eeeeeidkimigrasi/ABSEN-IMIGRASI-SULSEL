@@ -23,7 +23,7 @@ export function RiwayatTab() {
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [pesertaList, setPesertaList] = useState<{ nama: string; universitas: string }[]>([]);
+  const [pesertaList, setPesertaList] = useState<any[]>([]);
 
   useEffect(() => {
     fetch('/api/admin/data?tipe=peserta_list')

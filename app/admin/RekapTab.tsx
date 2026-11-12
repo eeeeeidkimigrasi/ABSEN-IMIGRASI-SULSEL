@@ -27,7 +27,7 @@ export function RekapTab() {
   const [hideLibur, setHideLibur] = useState(false);
 
   const [holidayModalOpen, setHolidayModalOpen] = useState(false);
-  const [holidays, setHolidays] = useState<{ tanggal: string; hari: string; keterangan: string }[]>([]);
+  const [holidays, setHolidays] = useState<any[]>([]);
   const [loadingHolidays, setLoadingHolidays] = useState(false);
   const [holForm, setHolForm] = useState({ tanggal: '', tanggal_selesai: '', keterangan: '' });
   const [savingHoliday, setSavingHoliday] = useState(false);
