@@ -642,6 +642,59 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // 2b. Hapus SP pada 1 Tanggal Tertentu (dari dalam Kartu Profil)
+    if (body.action === 'reset_single_sp') {
+      const nama = (body.nama || '').trim();
+      const universitas = (body.universitas || '').trim();
+      const tanggal = (body.tanggal || '').trim();
+      const nama_key = nama.toLowerCase();
+      const univ_key = universitas.toLowerCase();
+
+      if (!nama_key || !univ_key || !tanggal) {
+        return NextResponse.json({ ok: false, error: 'Data nama, universitas, dan tanggal wajib diisi.' }, { status: 400 });
+      }
+
+      const { data: row } = await supabase
+        .from('absensi')
+        .select('tanggal, jam_keluar, keterangan')
+        .eq('nama_key', nama_key)
+        .eq('univ_key', univ_key)
+        .eq('tanggal', tanggal)
+        .maybeSingle();
+
+      if (!row) {
+        return NextResponse.json({ ok: false, error: 'Data absensi pada tanggal tersebut tidak ditemukan.' }, { status: 404 });
+      }
+
+      const ket = String(row.keterangan || '');
+      const isNullExit = !row.jam_keluar;
+      const baseKet = ket.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').trim();
+      const newKet = isNullExit
+        ? (baseKet ? `${baseKet} [RESET]` : '[RESET]')
+        : (baseKet || null);
+
+      const { error: updErr } = await supabase
+        .from('absensi')
+        .update({ keterangan: newKet })
+        .eq('nama_key', nama_key)
+        .eq('univ_key', univ_key)
+        .eq('tanggal', tanggal);
+
+      if (updErr) {
+        return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
+      }
+
+      await supabase.from('admin_log').insert({
+        aksi: 'hapus_sp_tanggal',
+        tabel: 'absensi',
+        sebelum: { nama, universitas, tanggal, keterangan_lama: row.keterangan },
+        sesudah: { nama, universitas, tanggal, keterangan_baru: newKet },
+        sheets_ok: true,
+      });
+
+      return NextResponse.json({ ok: true });
+    }
+
     // 3. Buka Blokir SP-3
     if (body.action === 'unblock_sp') {
       const nama_key = (body.nama || '').trim().toLowerCase();

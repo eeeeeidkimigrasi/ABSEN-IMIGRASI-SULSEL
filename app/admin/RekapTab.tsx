@@ -229,7 +229,9 @@ export function RekapTab() {
   };
 
   const handleUnblockSp = async (r: any) => {
-    const ok = window.confirm(`Buka blokir SP-3 dan reset catatan pelanggaran untuk ${r.nama}?`);
+    const spNum = r.spCount || 0;
+    const labelAksi = spNum >= 3 ? `Buka blokir SP-3 dan hapus semua catatan pelanggaran` : `Hapus / Reset status SP-${spNum}`;
+    const ok = window.confirm(`${labelAksi} untuk ${r.nama}?`);
     if (!ok) return;
     const key = `${r.nama}|${r.universitas}`;
     setUnblockingKey(key);
@@ -242,13 +244,46 @@ export function RekapTab() {
       const result = await res.json();
       if (res.ok && result.ok) {
         loadRekap();
+        if (profileItem && profileItem.nama === r.nama && profileItem.universitas === r.universitas) {
+          fetchIndividuDetail(r.nama, r.universitas);
+        }
       } else {
-        alert(result.error || 'Gagal membuka blokir.');
+        alert(result.error || 'Gagal mereset SP.');
       }
     } catch {
       alert('Gagal menghubungi server.');
     } finally {
       setUnblockingKey(null);
+    }
+  };
+
+  const handleResetSingleSp = async (tanggal: string) => {
+    if (!profileItem) return;
+    const ok = window.confirm(`Hapus catatan pelanggaran "Tidak Absen Pulang" (SP) pada tanggal ${tanggal} untuk ${profileItem.nama}?`);
+    if (!ok) return;
+    setProcessingAuto(true);
+    try {
+      const res = await fetch('/api/admin/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'reset_single_sp',
+          nama: profileItem.nama,
+          universitas: profileItem.universitas,
+          tanggal,
+        }),
+      });
+      const result = await res.json();
+      if (res.ok && result.ok) {
+        fetchIndividuDetail(profileItem.nama, profileItem.universitas);
+        loadRekap();
+      } else {
+        alert(result.error || 'Gagal menghapus SP pada tanggal tersebut.');
+      }
+    } catch {
+      alert('Gagal menghubungi server.');
+    } finally {
+      setProcessingAuto(false);
     }
   };
 
@@ -1115,19 +1150,20 @@ export function RekapTab() {
                             </span>
                           )}
                           {sp >= 3 && (
-                            <>
-                              <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded bg-red-100 text-red-800 border border-red-300">
-                                SP-3 • Terblokir
-                              </span>
-                              <button
-                                type="button"
-                                disabled={unblockingKey === rowKey}
-                                onClick={() => handleUnblockSp(r)}
-                                className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded bg-[#043666] hover:bg-[#04315C] text-[#E9C170] shadow-sm transition-colors disabled:opacity-50"
-                              >
-                                {unblockingKey === rowKey ? 'Memproses...' : 'Buka Blokir'}
-                              </button>
-                            </>
+                            <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded bg-red-100 text-red-800 border border-red-300">
+                              SP-3 • Terblokir
+                            </span>
+                          )}
+                          {sp >= 1 && (
+                            <button
+                              type="button"
+                              disabled={unblockingKey === rowKey}
+                              onClick={() => handleUnblockSp(r)}
+                              className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded bg-[#043666] hover:bg-[#04315C] text-[#E9C170] shadow-sm transition-colors disabled:opacity-50"
+                              title="Hapus / Reset catatan pelanggaran SP peserta ini"
+                            >
+                              {unblockingKey === rowKey ? 'Memproses...' : sp >= 3 ? 'Buka Blokir / Reset SP' : 'Hapus SP'}
+                            </button>
                           )}
                         </div>
                       </td>
@@ -1635,9 +1671,20 @@ export function RekapTab() {
                                   <div className="flex items-center gap-1 flex-wrap">
                                     <span className="font-semibold">{c.jam_keluar}</span>
                                     {c.tidak_absen_pulang && (
-                                      <span className="inline-block px-1.5 py-0.5 text-[9px] font-extrabold uppercase rounded bg-red-100 text-red-800 border border-red-300">
-                                        Tidak Absen Pulang
-                                      </span>
+                                      <>
+                                        <span className="inline-block px-1.5 py-0.5 text-[9px] font-extrabold uppercase rounded bg-red-100 text-red-800 border border-red-300">
+                                          Tidak Absen Pulang
+                                        </span>
+                                        <button
+                                          type="button"
+                                          disabled={processingAuto}
+                                          onClick={() => handleResetSingleSp(c.tanggal)}
+                                          className="px-1.5 py-0.5 text-[9px] font-extrabold uppercase rounded bg-[#043666] hover:bg-[#04315C] text-[#E9C170] transition-colors disabled:opacity-50"
+                                          title="Hapus SP pada tanggal ini saja"
+                                        >
+                                          Hapus SP
+                                        </button>
+                                      </>
                                     )}
                                   </div>
                                 </td>
