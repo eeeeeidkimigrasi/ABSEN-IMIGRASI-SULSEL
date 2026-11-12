@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   const tanggal = (body.tanggal || '').trim();
   const tanggal_selesai = (body.tanggal_selesai || tanggal).trim();
   const jenis = (body.jenis || 'Sakit').trim();
-  const keterangan = body.keterangan ? rapikan(String(body.keterangan)).slice(0, 100) : null;
+  const rawKet = body.keterangan ? rapikan(String(body.keterangan)).replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '').trim().slice(0, 85) : '';
   const link_surat = body.link_surat ? String(body.link_surat).trim().slice(0, 300) : null;
 
   if (!nama || !universitas || !tanggal || !isValidDate(tanggal) || !isValidDate(tanggal_selesai) || tanggal_selesai < tanggal) {
@@ -99,12 +99,18 @@ export async function POST(req: NextRequest) {
     savedSelesai = sampleRow.tgl_selesai;
   }
 
+  // Sematkan tag [GRP:...] jika lebih dari 1 hari kerja agar digabung menjadi 1 baris di tabel Admin
+  const groupTag = targetDates.length > 1 ? `[GRP:${Date.now().toString(36)}]` : '';
+  const storedKeterangan = groupTag
+    ? `${rawKet} ${groupTag}`.trim()
+    : (rawKet || null);
+
   const rowsToUpsert = targetDates.map((d) => ({
     nama,
     universitas,
     tanggal: d,
     jenis,
-    keterangan,
+    keterangan: storedKeterangan,
     link_surat,
     tgl_mulai: savedMulai,
     tgl_selesai: savedSelesai,
@@ -130,7 +136,7 @@ export async function POST(req: NextRequest) {
         tanggal: d,
         hari,
         jenis,
-        keterangan: keterangan || '',
+        keterangan: rawKet || '',
         link_surat: link_surat || '',
       });
       await supabase
@@ -149,7 +155,7 @@ export async function POST(req: NextRequest) {
     aksi: 'tambah',
     tabel: 'izin',
     sebelum: null,
-    sesudah: { nama, universitas, rentang: `${tanggal} s/d ${tanggal_selesai}`, jumlah_hari: targetDates.length, jenis, keterangan, link_surat },
+    sesudah: { nama, universitas, rentang: `${tanggal} s/d ${tanggal_selesai}`, jumlah_hari: targetDates.length, jenis, keterangan: rawKet, link_surat },
     sheets_ok,
   });
 
@@ -178,7 +184,7 @@ export async function PUT(req: NextRequest) {
   const tanggal = (body.tanggal || '').trim();
   const tanggal_selesai = (body.tanggal_selesai || tanggal).trim();
   const jenis = (body.jenis || 'Sakit').trim();
-  const keterangan = body.keterangan ? rapikan(String(body.keterangan)).slice(0, 100) : null;
+  const rawKet = body.keterangan ? rapikan(String(body.keterangan)).replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '').trim().slice(0, 85) : '';
   const link_surat = body.link_surat ? String(body.link_surat).trim().slice(0, 300) : null;
 
   if (!oldNama || !oldUniv || oldTanggalList.length === 0 || !nama || !universitas || !tanggal || !isValidDate(tanggal) || !isValidDate(tanggal_selesai) || tanggal_selesai < tanggal) {
@@ -190,7 +196,7 @@ export async function PUT(req: NextRequest) {
   const new_nama_key = nama.toLowerCase();
   const new_univ_key = universitas.toLowerCase();
 
-  // Jika hanya 1 tanggal dan tanggal tidak berubah jadi rentang
+  // KASUS 1: Tetap 1 hari saja
   if (oldTanggalList.length === 1 && tanggal === tanggal_selesai) {
     const { data: oldRow } = await supabase
       .from('izin')
@@ -211,7 +217,7 @@ export async function PUT(req: NextRequest) {
         universitas,
         tanggal,
         jenis,
-        keterangan,
+        keterangan: rawKet || null,
         link_surat,
         synced_to_sheets: false,
       })
@@ -228,7 +234,7 @@ export async function PUT(req: NextRequest) {
     try {
       await updateIzinRow(
         { nama: oldRow.nama, universitas: oldRow.universitas, tanggal: oldRow.tanggal },
-        { nama, universitas, tanggal, hari, jenis, keterangan, link_surat }
+        { nama, universitas, tanggal, hari, jenis, keterangan: rawKet || null, link_surat }
       );
       await supabase
         .from('izin')
@@ -245,43 +251,67 @@ export async function PUT(req: NextRequest) {
       aksi: 'edit',
       tabel: 'izin',
       sebelum: cleanLogRow(oldRow),
-      sesudah: { nama, universitas, tanggal, jenis, keterangan, link_surat },
+      sesudah: { nama, universitas, tanggal, jenis, keterangan: rawKet, link_surat },
       sheets_ok,
     });
 
     return NextResponse.json({ ok: true, sheets_ok });
   }
 
-  // Jika mengubah grup izin rentang beberapa hari
+  // KASUS 2: Mengubah menjadi rentang multi-hari (atau mengedit rentang multi-hari)
   const allDates = generateDateRange(tanggal, tanggal_selesai);
   const targetDates = allDates.length === 1 ? allDates : allDates.filter((d) => !isWeekendOrFriday(d));
   if (targetDates.length === 0) {
     return NextResponse.json({ error: 'Seluruh tanggal yang dipilih jatuh pada hari libur (Jumat-Minggu).' }, { status: 400 });
   }
 
+  // Gabungkan tanggal lama + tanggal target agar jika ada baris terpisah di tanggal yang sama langsung dilebur jadi 1 grup
+  const datesToClean = Array.from(new Set([...oldTanggalList, ...targetDates]));
+
   const { data: oldRows } = await supabase
     .from('izin')
     .select('*')
     .eq('nama_key', old_nama_key)
     .eq('univ_key', old_univ_key)
-    .in('tanggal', oldTanggalList);
+    .in('tanggal', datesToClean);
 
-  const savedMulai = oldRows?.[0]?.tgl_mulai || null;
-  const savedSelesai = oldRows?.[0]?.tgl_selesai || null;
+  let savedMulai = oldRows?.[0]?.tgl_mulai || null;
+  let savedSelesai = oldRows?.[0]?.tgl_selesai || null;
 
+  if (!savedMulai || !savedSelesai) {
+    const { data: sampleAbs } = await supabase
+      .from('absensi')
+      .select('tgl_mulai, tgl_selesai')
+      .eq('nama_key', new_nama_key)
+      .eq('univ_key', new_univ_key)
+      .not('tgl_mulai', 'is', null)
+      .limit(1)
+      .maybeSingle();
+    if (sampleAbs) {
+      savedMulai = sampleAbs.tgl_mulai;
+      savedSelesai = sampleAbs.tgl_selesai;
+    }
+  }
+
+  // Hapus baris-baris lama di Supabase untuk tanggal terkait
   await supabase
     .from('izin')
     .delete()
     .eq('nama_key', old_nama_key)
     .eq('univ_key', old_univ_key)
-    .in('tanggal', oldTanggalList);
+    .in('tanggal', datesToClean);
+
+  const editGroupTag = targetDates.length > 1 ? `[GRP:${Date.now().toString(36)}]` : '';
+  const storedEditKet = editGroupTag
+    ? `${rawKet} ${editGroupTag}`.trim()
+    : (rawKet || null);
 
   const rowsToInsert = targetDates.map((d) => ({
     nama,
     universitas,
     tanggal: d,
     jenis,
-    keterangan,
+    keterangan: storedEditKet,
     link_surat,
     tgl_mulai: savedMulai,
     tgl_selesai: savedSelesai,
@@ -300,7 +330,7 @@ export async function PUT(req: NextRequest) {
     aksi: 'edit_rentang',
     tabel: 'izin',
     sebelum: { nama: oldNama, universitas: oldUniv, tanggal_lama: oldTanggalList },
-    sesudah: { nama, universitas, rentang_baru: `${tanggal} s/d ${tanggal_selesai}`, jumlah_hari: targetDates.length, jenis, keterangan },
+    sesudah: { nama, universitas, rentang_baru: `${tanggal} s/d ${tanggal_selesai}`, jumlah_hari: targetDates.length, jenis, keterangan: rawKet },
     sheets_ok: true,
   });
 
