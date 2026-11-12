@@ -333,7 +333,7 @@ async function handleIndividu(params: URLSearchParams) {
   }
 
   const cleanKet = (val?: string | null) =>
-    val ? val.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').replace(/\[AUTO\]/g, '').trim() : '';
+    val ? val.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').replace(/\[AUTO\]/g, '').replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '').trim() : '';
 
   const calendar = [...allDates].reverse().map((d) => {
     const hari = getDayName(d);
@@ -373,7 +373,7 @@ async function handleIndividu(params: URLSearchParams) {
         jam_masuk: '-',
         jam_keluar: '-',
         tidak_absen_pulang: false,
-        keterangan: iz.keterangan || iz.jenis || '-',
+        keterangan: (iz.keterangan ? String(iz.keterangan).replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '').trim() : '') || iz.jenis || '-',
         link_surat: iz.link_surat || null,
       };
     }

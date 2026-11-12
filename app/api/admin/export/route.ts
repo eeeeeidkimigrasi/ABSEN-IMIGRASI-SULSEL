@@ -45,7 +45,7 @@ function escapeCSV(val: any): string {
   let str = String(val)
     .replace(/\[TAP\]/g, '')
     .replace(/\[RESET\]/g, '')
-    .replace(/\[AUTO\]/g, '')
+    .replace(/\[AUTO\]/g, '').replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '')
     .trim();
 
   if (/^[=+-@\t\r]/.test(str)) {

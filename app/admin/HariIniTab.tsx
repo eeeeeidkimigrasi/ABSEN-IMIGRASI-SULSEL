@@ -29,7 +29,7 @@ export function HariIniTab() {
   const belumPulang = data.hadir.filter((h) => !h.jam_keluar);
 
   const cleanKet = (ket?: string | null) =>
-    ket ? ket.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').replace(/\[AUTO\]/g, '').trim() || '-' : '-';
+    ket ? ket.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').replace(/\[AUTO\]/g, '').replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '').trim() || '-' : '-';
 
   return (
     <div className="space-y-8">
@@ -206,7 +206,7 @@ export function HariIniTab() {
                       {iz.jenis}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5 text-slate-600">{iz.keterangan || '-'}</td>
+                  <td className="px-5 py-3.5 text-slate-600">{(iz.keterangan ? String(iz.keterangan).replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '').trim() : '') || '-'}</td>
                   <td className="px-5 py-3.5">
                     {iz.link_surat ? (
                       <a

@@ -2,31 +2,14 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 
-function isWeekendOrFriday(dateStr: string): boolean {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-  return day === 0 || day === 5 || day === 6;
-}
-
-// Mengecek apakah dateB adalah hari kerja berurutan setelah dateA (termasuk melewati libur Jumat-Minggu)
-function isConsecutiveWorkday(dateA: string, dateB: string): boolean {
-  if (dateB <= dateA) return false;
-  const [sy, sm, sd] = dateA.split('-').map(Number);
-  const [ey, em, ed] = dateB.split('-').map(Number);
-  const cur = new Date(Date.UTC(sy, sm - 1, sd));
-  const end = new Date(Date.UTC(ey, em - 1, ed));
-
-  cur.setUTCDate(cur.getUTCDate() + 1);
-  let steps = 0;
-  while (cur < end && steps < 10) {
-    const ds = cur.toISOString().slice(0, 10);
-    if (!isWeekendOrFriday(ds)) {
-      return false; // Ada hari kerja di antaranya yang tidak izin
-    }
-    cur.setUTCDate(cur.getUTCDate() + 1);
-    steps++;
-  }
-  return steps < 10;
+function extractGroupTag(ket?: string | null): { cleanKet: string; groupId: string | null } {
+  const raw = String(ket || '');
+  const match = raw.match(/\[GRP:([a-zA-Z0-9_-]+)\]/);
+  const cleanKet = raw.replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '').trim();
+  return {
+    cleanKet,
+    groupId: match ? match[1] : null,
+  };
 }
 
 export function IzinTab() {
@@ -73,47 +56,52 @@ export function IzinTab() {
     fetchIzin();
   }, [fetchIzin]);
 
-  // Mengelompokkan izin berurutan milik orang yang sama menjadi 1 baris rentang tanggal yang rapi
+  // HANYA mengelompokkan baris izin yang diajukan bersamaan dalam 1 pengajuan rentang ([GRP:...])
   const groupedData = useMemo(() => {
-    const byPerson = new Map<string, any[]>();
+    const groupMap = new Map<string, any>();
+    const result: any[] = [];
+
     for (const r of data) {
-      const k = `${(r.nama || '').toLowerCase().trim()}|${(r.universitas || '').toLowerCase().trim()}|${r.jenis || ''}|${r.keterangan || ''}|${r.link_surat || ''}`;
-      const list = byPerson.get(k) || [];
-      list.push(r);
-      byPerson.set(k, list);
-    }
+      const { cleanKet, groupId } = extractGroupTag(r.keterangan);
 
-    const groups: any[] = [];
-    for (const list of Array.from(byPerson.values())) {
-      list.sort((a: any, b: any) => (a.tanggal < b.tanggal ? -1 : a.tanggal > b.tanggal ? 1 : 0));
-      let currentGroup: any = null;
-
-      for (const item of list) {
-        if (!currentGroup) {
-          currentGroup = {
-            ...item,
-            tgl_awal: item.tanggal,
-            tgl_akhir: item.tanggal,
-            tanggal_list: [item.tanggal],
+      if (!groupId) {
+        // Pengajuan izin 1 hari: JANGAN digabung dengan hari lain
+        result.push({
+          ...r,
+          keterangan: cleanKet,
+          tgl_awal: r.tanggal,
+          tgl_akhir: r.tanggal,
+          tanggal_list: [r.tanggal],
+        });
+      } else {
+        const key = `${(r.nama || '').toLowerCase().trim()}|${(r.universitas || '').toLowerCase().trim()}|${groupId}`;
+        const existing = groupMap.get(key);
+        if (!existing) {
+          const newGroup = {
+            ...r,
+            keterangan: cleanKet,
+            tgl_awal: r.tanggal,
+            tgl_akhir: r.tanggal,
+            tanggal_list: [r.tanggal],
           };
-        } else if (isConsecutiveWorkday(currentGroup.tgl_akhir, item.tanggal)) {
-          currentGroup.tgl_akhir = item.tanggal;
-          currentGroup.tanggal_list.push(item.tanggal);
+          groupMap.set(key, newGroup);
+          result.push(newGroup);
         } else {
-          groups.push(currentGroup);
-          currentGroup = {
-            ...item,
-            tgl_awal: item.tanggal,
-            tgl_akhir: item.tanggal,
-            tanggal_list: [item.tanggal],
-          };
+          if (r.tanggal < existing.tgl_awal) existing.tgl_awal = r.tanggal;
+          if (r.tanggal > existing.tgl_akhir) existing.tgl_akhir = r.tanggal;
+          if (!existing.tanggal_list.includes(r.tanggal)) {
+            existing.tanggal_list.push(r.tanggal);
+          }
         }
       }
-      if (currentGroup) groups.push(currentGroup);
     }
 
-    groups.sort((a, b) => (a.tgl_akhir > b.tgl_akhir ? -1 : a.tgl_akhir < b.tgl_akhir ? 1 : 0));
-    return groups;
+    for (const item of result) {
+      item.tanggal_list.sort();
+    }
+
+    result.sort((a, b) => (a.tgl_akhir > b.tgl_akhir ? -1 : a.tgl_akhir < b.tgl_akhir ? 1 : 0));
+    return result;
   }, [data]);
 
   const handleFilter = (e: any) => {
@@ -310,7 +298,7 @@ export function IzinTab() {
             Daftar Laporan Izin & Sakit Peserta
           </h2>
           <span className="px-2.5 py-0.5 text-[11px] font-extrabold rounded bg-[#E9C170] text-[#04315C]">
-            {groupedData.length} Laporan ({data.length} Hari)
+            {groupedData.length} Laporan
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -335,7 +323,7 @@ export function IzinTab() {
                 </tr>
               ) : (
                 groupedData.map((r, i) => {
-                  const isMulti = r.tgl_awal !== r.tgl_akhir;
+                  const isMulti = r.tanggal_list.length > 1;
                   return (
                     <tr key={i} className="hover:bg-slate-50/80 transition-colors">
                       <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-slate-700">
