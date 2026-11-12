@@ -4,7 +4,7 @@ import { fetchAll } from '@/lib/fetch-all';
 import { getTodayDate, getDayName } from '@/lib/waktu';
 
 const ACTIVE_DAYS = 14;
-const BATAS_JAM_PULANG = '18:00';
+const BATAS_JAM_PULANG = process.env.BATAS_JAM_PULANG || '18:00';
 
 function getCurrentTimeWita(): string {
   const wita = new Date(Date.now() + 8 * 3600 * 1000);
@@ -38,6 +38,25 @@ function generateDateRange(startStr: string, endStr: string): string[] {
     cur.setUTCDate(cur.getUTCDate() + 1);
   }
   return dates;
+}
+
+async function getCustomHolidaysMap(): Promise> {
+  const { data } = await supabase
+    .from('admin_log')
+    .select('id, aksi, sesudah')
+    .eq('tabel', 'hari_libur')
+    .order('id', { ascending: true });
+
+  const map = new Map<string, string>();
+  for (const row of data || []) {
+    const info = row.sesudah as any;
+    if (row.aksi === 'tambah_libur' && info?.tanggal) {
+      map.set(String(info.tanggal), String(info.keterangan || 'Hari Libur Nasional'));
+    } else if (row.aksi === 'hapus_libur' && info?.tanggal) {
+      map.delete(String(info.tanggal));
+    }
+  }
+  return map;
 }
 
 function escapeCSV(val: any): string {
@@ -117,6 +136,7 @@ export async function GET(req: NextRequest) {
           .range(from, to)
       );
 
+      const customHolidays = await getCustomHolidaysMap();
       const izinRows = await fetchAll<any>((from, to) =>
         supabase
           .from('izin')
@@ -165,6 +185,7 @@ export async function GET(req: NextRequest) {
         const abs = absenMap.get(d);
         const iz = izinMap.get(d);
         const libur = isWeekendOrFriday(d);
+        const liburNas = customHolidays.get(d);
 
         if (abs) {
           const isAuto = String(abs.keterangan || '').includes('[AUTO]');
@@ -172,6 +193,8 @@ export async function GET(req: NextRequest) {
           csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},HADIR,${String(abs.jam_masuk || '-').slice(0, 5)},${String(abs.jam_keluar || '-').slice(0, 5)},${ketStr}\n`;
         } else if (iz) {
           csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},IZIN (${escapeCSV(iz.jenis)}),-,-,${escapeCSV(iz.keterangan)}\n`;
+        } else if (liburNas) {
+          csvContent += ${d},,,,LIBUR NASIONAL,-,-,\n;
         } else if (libur) {
           csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},LIBUR,-,-,Libur (Jumat / Akhir Pekan)\n`;
         } else if (d === todayStr && jamSekarang < BATAS_JAM_PULANG) {

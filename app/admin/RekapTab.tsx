@@ -26,6 +26,69 @@ export function RekapTab() {
   const [processingAuto, setProcessingAuto] = useState(false);
   const [hideLibur, setHideLibur] = useState(false);
 
+  const [holidayModalOpen, setHolidayModalOpen] = useState(false);
+  const [holidays, setHolidays] = useState<{ tanggal: string; hari: string; keterangan: string }[]>([]);
+  const [loadingHolidays, setLoadingHolidays] = useState(false);
+  const [holForm, setHolForm] = useState({ tanggal: '', tanggal_selesai: '', keterangan: '' });
+  const [savingHoliday, setSavingHoliday] = useState(false);
+
+  const loadHolidays = () => {
+    setLoadingHolidays(true);
+    fetch('/api/admin/data?tipe=libur')
+      .then((res) => res.json())
+      .then((d) => {
+        setHolidays(Array.isArray(d) ? d : []);
+        setLoadingHolidays(false);
+      })
+      .catch(() => setLoadingHolidays(false));
+  };
+
+  const handleAddHoliday = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!holForm.tanggal) return;
+    setSavingHoliday(true);
+    try {
+      const res = await fetch('/api/admin/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add_holiday',
+          tanggal: holForm.tanggal,
+          tanggal_selesai: holForm.tanggal_selesai || holForm.tanggal,
+          keterangan: holForm.keterangan || 'Hari Libur Nasional',
+        }),
+      });
+      const result = await res.json();
+      if (res.ok && result.ok) {
+        setHolForm({ tanggal: '', tanggal_selesai: '', keterangan: '' });
+        loadHolidays();
+        loadRekap();
+      } else {
+        alert(result.error || 'Gagal menyimpan hari libur.');
+      }
+    } catch {
+      alert('Gagal menghubungi server.');
+    } finally {
+      setSavingHoliday(false);
+    }
+  };
+
+  const handleDeleteHoliday = async (tanggal: string) => {
+    const ok = window.confirm(`Hapus tanggal merah / libur ${tanggal}?`);
+    if (!ok) return;
+    try {
+      const res = await fetch('/api/admin/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_holiday', tanggal }),
+      });
+      if (res.ok) {
+        loadHolidays();
+        loadRekap();
+      }
+    } catch {}
+  };
+
   const [ttdJabatan, setTtdJabatan] = useState('Pembimbing / Pejabat Berwenang,');
   const [ttdNama, setTtdNama] = useState('');
   const [ttdNip, setTtdNip] = useState('Kanwil Ditjen Imigrasi Sulawesi Selatan');
@@ -974,12 +1037,26 @@ export function RekapTab() {
             Hanya Peserta Aktif (14 Hari)
           </label>
         </div>
-        <a
-          href={`/api/admin/export?tipe=rekap&q=${encodeURIComponent(search)}&active=${activeOnly}`}
-          className="px-4 py-2 bg-[#043666] hover:bg-[#04315C] text-[#E9C170] font-bold text-xs uppercase tracking-wider rounded-md shadow-sm transition-colors"
-        >
-          Ekspor CSV
-        </a>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const todayWita = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+              setHolForm({ tanggal: todayWita, tanggal_selesai: todayWita, keterangan: '' });
+              setHolidayModalOpen(true);
+              loadHolidays();
+            }}
+            className="px-3.5 py-2 bg-white hover:bg-slate-100 text-[#043666] border border-[#043666] font-bold text-xs uppercase tracking-wider rounded-md shadow-sm transition-colors"
+          >
+            Kelola Hari Libur
+          </button>
+          <a
+            href={`/api/admin/export?tipe=rekap&q=${encodeURIComponent(search)}&active=${activeOnly}`}
+            className="px-4 py-2 bg-[#043666] hover:bg-[#04315C] text-[#E9C170] font-bold text-xs uppercase tracking-wider rounded-md shadow-sm transition-colors"
+          >
+            Ekspor CSV
+          </a>
+        </div>
       </div>
 
       <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
@@ -1107,6 +1184,151 @@ export function RekapTab() {
           </table>
         </div>
       </div>
+
+      {holidayModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/75 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden flex flex-col max-h-[88vh]">
+            <div className="bg-[#043666] px-6 py-4 border-b-2 border-[#E9C170] flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#E9C170] block">
+                  Kalender Kerja Kanwil Sulsel
+                </span>
+                <h3 className="text-base font-extrabold text-white mt-0.5">
+                  Kelola Hari Libur Nasional & Cuti Bersama
+                </h3>
+              </div>
+              <span className="px-2.5 py-0.5 text-[11px] font-extrabold rounded bg-[#E9C170] text-[#04315C]">
+                {holidays.length} Tanggal
+              </span>
+            </div>
+
+            <div className="p-6 space-y-5 overflow-y-auto flex-1">
+              <form onSubmit={handleAddHoliday} className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
+                <div className="text-xs font-extrabold uppercase tracking-wider text-[#043666]">
+                  + Tambah Tanggal Merah / Cuti Bersama
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                      Dari Tanggal
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={holForm.tanggal}
+                      onChange={(e) =>
+                        setHolForm((f) => ({
+                          ...f,
+                          tanggal: e.target.value,
+                          tanggal_selesai: f.tanggal_selesai < e.target.value ? e.target.value : f.tanggal_selesai,
+                        }))
+                      }
+                      className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-900 focus:outline-none focus:border-[#043666]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                      Sampai Tanggal
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      min={holForm.tanggal}
+                      value={holForm.tanggal_selesai}
+                      onChange={(e) => setHolForm({ ...holForm, tanggal_selesai: e.target.value })}
+                      className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-900 focus:outline-none focus:border-[#043666]"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                    Nama Hari Libur / Keterangan
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={80}
+                    placeholder="Contoh: Libur Nasional / Cuti Bersama"
+                    value={holForm.keterangan}
+                    onChange={(e) => setHolForm({ ...holForm, keterangan: e.target.value })}
+                    className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-900 focus:outline-none focus:border-[#043666]"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={savingHoliday}
+                    className="px-4 py-1.5 bg-[#043666] hover:bg-[#04315C] text-[#E9C170] font-bold text-xs uppercase tracking-wider rounded shadow-sm disabled:opacity-50"
+                  >
+                    {savingHoliday ? 'Menyimpan...' : 'Simpan Hari Libur'}
+                  </button>
+                </div>
+              </form>
+
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-wider text-slate-700">
+                  Daftar Tanggal Merah Terdaftar (Selain Jumat–Minggu)
+                </div>
+                <div className="max-h-52 overflow-y-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-extrabold border-b border-slate-200 sticky top-0">
+                      <tr>
+                        <th className="px-3.5 py-2">Tanggal</th>
+                        <th className="px-3.5 py-2">Hari</th>
+                        <th className="px-3.5 py-2">Keterangan</th>
+                        <th className="px-3.5 py-2 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {loadingHolidays ? (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-6 text-center text-slate-400 font-bold">
+                            Memuat daftar hari libur...
+                          </td>
+                        </tr>
+                      ) : (
+                        holidays.map((h, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            <td className="px-3.5 py-2 font-bold text-slate-900 whitespace-nowrap">{h.tanggal}</td>
+                            <td className="px-3.5 py-2 text-slate-600 whitespace-nowrap">{h.hari}</td>
+                            <td className="px-3.5 py-2 text-slate-800">{h.keterangan}</td>
+                            <td className="px-3.5 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteHoliday(h.tanggal)}
+                                className="px-2 py-0.5 text-[10px] font-bold uppercase bg-red-50 text-red-700 border border-red-200 rounded hover:bg-red-700 hover:text-white"
+                              >
+                                Hapus
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                      {!loadingHolidays && holidays.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
+                            Belum ada tanggal merah tambahan. (Jumat, Sabtu, dan Minggu sudah otomatis libur).
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setHolidayModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold uppercase tracking-wider border border-slate-300 bg-white rounded-md text-slate-700 hover:bg-slate-100"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editItem && (
         <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center z-50 p-4">

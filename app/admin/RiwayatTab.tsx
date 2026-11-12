@@ -23,6 +23,18 @@ export function RiwayatTab() {
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [pesertaList, setPesertaList] = useState<{ nama: string; universitas: string }[]>([]);
+
+  useEffect(() => {
+    fetch('/api/admin/data?tipe=peserta_list')
+      .then((res) => res.json())
+      .then((d) => {
+        if (Array.isArray(d)) setPesertaList(d);
+      })
+      .catch(() => {});
+  }, []);
+
+  const univList = Array.from(new Set(pesertaList.map((p) => p.universitas))).sort();
 
   const todayStr = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 
@@ -410,8 +422,7 @@ export function RiwayatTab() {
                   <input
                     type="text"
                     required
-                    value={form.nama}
-                    onChange={(e) => setForm({ ...form, nama: e.target.value })}
+                    list="riwayat-peserta-nama-list" placeholder="Ketik atau pilih nama peserta..." value={form.nama} onChange={(e) => { const val = e.target.value; const matched = pesertaList.find((p) => p.nama.toLowerCase() === val.trim().toLowerCase()); setForm((f) => ({ ...f, nama: val, universitas: matched ? matched.universitas : f.universitas })); }}
                     className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-[#043666]"
                   />
                 </div>
@@ -423,8 +434,7 @@ export function RiwayatTab() {
                   <input
                     type="text"
                     required
-                    value={form.universitas}
-                    onChange={(e) => setForm({ ...form, universitas: e.target.value })}
+                    list="riwayat-peserta-univ-list" placeholder="Otomatis terisi saat pilih nama / ketik manual..." value={form.universitas} onChange={(e) => setForm({ ...form, universitas: e.target.value })}
                     className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-[#043666]"
                   />
                 </div>
@@ -519,7 +529,7 @@ export function RiwayatTab() {
                     {submitting ? 'Menyimpan...' : 'Simpan Data'}
                   </button>
                 </div>
-              </form>
+              <datalist id="riwayat-peserta-nama-list">{pesertaList.map((p, idx) => (<option key={idx} value={p.nama}>{p.universitas}</option>))}</datalist><datalist id="riwayat-peserta-univ-list">{univList.map((u, idx) => (<option key={idx} value={u} />))}</datalist></form>
             </div>
           </div>
         </div>

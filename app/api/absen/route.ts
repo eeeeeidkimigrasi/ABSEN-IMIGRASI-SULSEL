@@ -8,7 +8,7 @@ import { fetchAll } from '@/lib/fetch-all';
 const OFFICE_LAT = Number(process.env.OFFICE_LAT);
 const OFFICE_LNG = Number(process.env.OFFICE_LNG);
 const RADIUS_METER = Number(process.env.RADIUS_METER || 150);
-const BATAS_JAM_PULANG = '18:00';
+const BATAS_JAM_PULANG = process.env.BATAS_JAM_PULANG || '18:00';
 
 if (isNaN(OFFICE_LAT) || isNaN(OFFICE_LNG)) {
   throw new Error('OFFICE_LAT and OFFICE_LNG must be set');

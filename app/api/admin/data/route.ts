@@ -4,7 +4,7 @@ import { getTodayDate, getDayName } from '@/lib/waktu';
 import { fetchAll } from '@/lib/fetch-all';
 
 const ACTIVE_DAYS = 14;
-const BATAS_JAM_PULANG = '18:00';
+const BATAS_JAM_PULANG = process.env.BATAS_JAM_PULANG || '18:00';
 
 function getCurrentTimeWita(): string {
   const wita = new Date(Date.now() + 8 * 3600 * 1000);
@@ -17,7 +17,7 @@ function getThresholdDateWita(daysAgo: number): string {
   return wita.toISOString().slice(0, 10);
 }
 
-// Jumat (5), Sabtu (6), Minggu (0) adalah hari libur
+// Jumat (5), Sabtu (6), Minggu (0) adalah hari libur rutin
 function isWeekendOrFriday(dateStr: string): boolean {
   const [y, m, d] = dateStr.split('-').map(Number);
   const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
@@ -41,6 +41,26 @@ function generateDateRange(startStr: string, endStr: string): string[] {
   return dates;
 }
 
+// Mengambil daftar Hari Libur Nasional / Cuti Bersama yang disimpan Admin
+async function getCustomHolidaysMap(): Promise> {
+  const { data } = await supabase
+    .from('admin_log')
+    .select('id, aksi, sesudah')
+    .eq('tabel', 'hari_libur')
+    .order('id', { ascending: true });
+
+  const map = new Map<string, string>();
+  for (const row of data || []) {
+    const info = row.sesudah as any;
+    if (row.aksi === 'tambah_libur' && info?.tanggal) {
+      map.set(String(info.tanggal), String(info.keterangan || 'Hari Libur Nasional'));
+    } else if (row.aksi === 'hapus_libur' && info?.tanggal) {
+      map.delete(String(info.tanggal));
+    }
+  }
+  return map;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = req.nextUrl;
@@ -58,6 +78,10 @@ export async function GET(req: NextRequest) {
       return await handleIzin(searchParams);
     } else if (tipe === 'log') {
       return await handleLog();
+    } else if (tipe === 'libur') {
+      return await handleLibur();
+    } else if (tipe === 'peserta_list') {
+      return await handlePesertaList();
     }
 
     return NextResponse.json({ error: 'Tipe tidak valid' }, { status: 400 });
@@ -65,6 +89,53 @@ export async function GET(req: NextRequest) {
     console.error('API Admin Data Error:', err);
     return NextResponse.json({ error: err?.message || 'Gagal memuat data dari database.' }, { status: 500 });
   }
+}
+
+async function handleLibur() {
+  const map = await getCustomHolidaysMap();
+  const list = Array.from(map.entries())
+    .map(([tanggal, keterangan]) => ({
+      tanggal,
+      hari: getDayName(tanggal),
+      keterangan,
+    }))
+    .sort((a, b) => (a.tanggal > b.tanggal ? -1 : a.tanggal < b.tanggal ? 1 : 0));
+  return NextResponse.json(list);
+}
+
+async function handlePesertaList() {
+  const abs = await fetchAll<any>((from, to) =>
+    supabase
+      .from('absensi')
+      .select('nama, universitas, nama_key, univ_key')
+      .order('tanggal', { ascending: false })
+      .order('nama_key', { ascending: true })
+      .order('univ_key', { ascending: true })
+      .range(from, to)
+  );
+
+  const iz = await fetchAll<any>((from, to) =>
+    supabase
+      .from('izin')
+      .select('nama, universitas, nama_key, univ_key')
+      .order('tanggal', { ascending: false })
+      .order('nama_key', { ascending: true })
+      .order('univ_key', { ascending: true })
+      .range(from, to)
+  );
+
+  const pMap = new Map<string, { nama: string; universitas: string }>();
+  for (const r of [...abs, ...iz]) {
+    const k = `${r.nama_key}|${r.univ_key}`;
+    if (!pMap.has(k) && r.nama && r.universitas) {
+      pMap.set(k, { nama: r.nama, universitas: r.universitas });
+    }
+  }
+
+  const list = Array.from(pMap.values()).sort((a, b) =>
+    a.nama.toLowerCase().localeCompare(b.nama.toLowerCase())
+  );
+  return NextResponse.json(list);
 }
 
 async function handleLog() {
@@ -130,27 +201,29 @@ async function handleRekap(params: URLSearchParams) {
   const jamSekarang = getCurrentTimeWita();
   const thresholdStr = getThresholdDateWita(ACTIVE_DAYS);
 
-  const data = await fetchAll<any>((from, to) => {
-    let q = supabase
-      .from('absensi')
-      .select('nama, universitas, tanggal, jam_keluar, keterangan, nama_key, univ_key, tgl_mulai, tgl_selesai');
-    if (search) q = q.ilike('nama', `%${search}%`);
-    return q
-      .order('tanggal', { ascending: true })
-      .order('nama_key', { ascending: true })
-      .order('univ_key', { ascending: true })
-      .range(from, to);
-  });
-
-  const izinData = await fetchAll<any>((from, to) =>
-    supabase
-      .from('izin')
-      .select('nama_key, univ_key, tanggal, tgl_mulai, tgl_selesai')
-      .order('tanggal', { ascending: true })
-      .order('nama_key', { ascending: true })
-      .order('univ_key', { ascending: true })
-      .range(from, to)
-  );
+  const [data, izinData, customHolidays] = await Promise.all([
+    fetchAll<any>((from, to) => {
+      let q = supabase
+        .from('absensi')
+        .select('nama, universitas, tanggal, jam_keluar, keterangan, nama_key, univ_key, tgl_mulai, tgl_selesai');
+      if (search) q = q.ilike('nama', `%${search}%`);
+      return q
+        .order('tanggal', { ascending: true })
+        .order('nama_key', { ascending: true })
+        .order('univ_key', { ascending: true })
+        .range(from, to);
+    }),
+    fetchAll<any>((from, to) =>
+      supabase
+        .from('izin')
+        .select('nama_key, univ_key, tanggal, tgl_mulai, tgl_selesai')
+        .order('tanggal', { ascending: true })
+        .order('nama_key', { ascending: true })
+        .order('univ_key', { ascending: true })
+        .range(from, to)
+    ),
+    getCustomHolidaysMap(),
+  ]);
 
   const izinCountMap = new Map<string, { count: number; tgl_mulai: string | null; tgl_selesai: string | null }>();
   const izinDateSet = new Set<string>();
@@ -237,8 +310,7 @@ async function handleRekap(params: URLSearchParams) {
       const allDates = generateDateRange(startRange, rawEnd);
       let alpha = 0;
       for (const d of allDates) {
-        if (isWeekendOrFriday(d)) continue;
-        // Jika hari ini masih sebelum jam 18:00 WITA, jangan langsung dihitung Alpha
+        if (isWeekendOrFriday(d) || customHolidays.has(d)) continue;
         if (d === todayStr && jamSekarang < BATAS_JAM_PULANG) continue;
         if (!hadirDateSet.has(`${entry.key}|${d}`) && !izinDateSet.has(`${entry.key}|${d}`)) {
           alpha++;
@@ -267,25 +339,27 @@ async function handleIndividu(params: URLSearchParams) {
     return NextResponse.json({ error: 'Nama dan universitas wajib diisi' }, { status: 400 });
   }
 
-  const absensiRows = await fetchAll<any>((from, to) =>
-    supabase
-      .from('absensi')
-      .select('tanggal, jam_masuk, jam_keluar, keterangan, tgl_mulai, tgl_selesai')
-      .eq('nama_key', nama_key)
-      .eq('univ_key', univ_key)
-      .order('tanggal', { ascending: true })
-      .range(from, to)
-  );
-
-  const izinRows = await fetchAll<any>((from, to) =>
-    supabase
-      .from('izin')
-      .select('tanggal, jenis, keterangan, link_surat, tgl_mulai, tgl_selesai')
-      .eq('nama_key', nama_key)
-      .eq('univ_key', univ_key)
-      .order('tanggal', { ascending: true })
-      .range(from, to)
-  );
+  const [absensiRows, izinRows, customHolidays] = await Promise.all([
+    fetchAll<any>((from, to) =>
+      supabase
+        .from('absensi')
+        .select('tanggal, jam_masuk, jam_keluar, keterangan, tgl_mulai, tgl_selesai')
+        .eq('nama_key', nama_key)
+        .eq('univ_key', univ_key)
+        .order('tanggal', { ascending: true })
+        .range(from, to)
+    ),
+    fetchAll<any>((from, to) =>
+      supabase
+        .from('izin')
+        .select('tanggal, jenis, keterangan, link_surat, tgl_mulai, tgl_selesai')
+        .eq('nama_key', nama_key)
+        .eq('univ_key', univ_key)
+        .order('tanggal', { ascending: true })
+        .range(from, to)
+    ),
+    getCustomHolidaysMap(),
+  ]);
 
   let tgl_mulai: string | null = null;
   let tgl_selesai: string | null = null;
@@ -326,20 +400,28 @@ async function handleIndividu(params: URLSearchParams) {
   let missingPastWorkdays = 0;
   if (tgl_mulai && tgl_mulai < cutoffPast) {
     for (const d of allDates) {
-      if (d < cutoffPast && !isWeekendOrFriday(d) && !absenMap.has(d) && !izinMap.has(d)) {
+      if (d < cutoffPast && !isWeekendOrFriday(d) && !customHolidays.has(d) && !absenMap.has(d) && !izinMap.has(d)) {
         missingPastWorkdays++;
       }
     }
   }
 
   const cleanKet = (val?: string | null) =>
-    val ? val.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').replace(/\[AUTO\]/g, '').replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '').trim() : '';
+    val
+      ? val
+          .replace(/\[TAP\]/g, '')
+          .replace(/\[RESET\]/g, '')
+          .replace(/\[AUTO\]/g, '')
+          .replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '')
+          .trim()
+      : '';
 
   const calendar = [...allDates].reverse().map((d) => {
     const hari = getDayName(d);
     const abs = absenMap.get(d);
     const iz = izinMap.get(d);
-    const libur = isWeekendOrFriday(d);
+    const liburRutin = isWeekendOrFriday(d);
+    const liburNasional = customHolidays.get(d);
 
     if (abs) {
       const rawKet = String(abs.keterangan || '');
@@ -373,12 +455,24 @@ async function handleIndividu(params: URLSearchParams) {
         jam_masuk: '-',
         jam_keluar: '-',
         tidak_absen_pulang: false,
-        keterangan: (iz.keterangan ? String(iz.keterangan).replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '').trim() : '') || iz.jenis || '-',
+        keterangan: cleanKet(iz.keterangan) || iz.jenis || '-',
         link_surat: iz.link_surat || null,
       };
     }
 
-    if (libur) {
+    if (liburNasional) {
+      return {
+        tanggal: d,
+        hari,
+        status: 'LIBUR',
+        jam_masuk: '-',
+        jam_keluar: '-',
+        tidak_absen_pulang: false,
+        keterangan: `Libur Nasional: ${liburNasional}`,
+      };
+    }
+
+    if (liburRutin) {
       return {
         tanggal: d,
         hari,
@@ -474,7 +568,60 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // 1. Aksi Buka Blokir SP-3
+    // 1. Tambah Hari Libur Nasional / Cuti Bersama (Bisa 1 hari atau rentang tanggal)
+    if (body.action === 'add_holiday') {
+      const tanggal = (body.tanggal || '').trim();
+      const tanggal_selesai = (body.tanggal_selesai || tanggal).trim();
+      const keterangan = (body.keterangan || 'Hari Libur Nasional').trim().slice(0, 80);
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal) || !/^\d{4}-\d{2}-\d{2}$/.test(tanggal_selesai) || tanggal_selesai < tanggal) {
+        return NextResponse.json({ ok: false, error: 'Tanggal hari libur tidak valid.' }, { status: 400 });
+      }
+
+      const dates = generateDateRange(tanggal, tanggal_selesai);
+      if (dates.length === 0 || dates.length > 30) {
+        return NextResponse.json({ ok: false, error: 'Rentang hari libur maksimal 30 hari.' }, { status: 400 });
+      }
+
+      const logsToInsert = dates.map((d) => ({
+        aksi: 'tambah_libur',
+        tabel: 'hari_libur',
+        sebelum: null,
+        sesudah: { tanggal: d, keterangan },
+        sheets_ok: true,
+      }));
+
+      const { error } = await supabase.from('admin_log').insert(logsToInsert);
+      if (error) {
+        return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ ok: true, count: dates.length });
+    }
+
+    // 2. Hapus Hari Libur Nasional
+    if (body.action === 'delete_holiday') {
+      const tanggal = (body.tanggal || '').trim();
+      if (!tanggal) {
+        return NextResponse.json({ ok: false, error: 'Tanggal wajib diisi.' }, { status: 400 });
+      }
+
+      const { error } = await supabase.from('admin_log').insert({
+        aksi: 'hapus_libur',
+        tabel: 'hari_libur',
+        sebelum: { tanggal },
+        sesudah: { tanggal },
+        sheets_ok: true,
+      });
+
+      if (error) {
+        return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // 3. Buka Blokir SP-3
     if (body.action === 'unblock_sp') {
       const nama_key = (body.nama || '').trim().toLowerCase();
       const univ_key = (body.universitas || '').trim().toLowerCase();
@@ -516,7 +663,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // 2. Aksi Isi Otomatis Masa Lalu (Backfill Senin-Kamis dengan jam 07:15 - 16:05)
+    // 4. Isi Otomatis Masa Lalu (Backfill Senin-Kamis dengan jam 07:15 - 16:05, melewati Libur Nasional)
     if (body.action === 'backfill_past') {
       const nama = (body.nama || '').trim();
       const universitas = (body.universitas || '').trim();
@@ -528,25 +675,27 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, error: 'Nama dan universitas wajib diisi.' }, { status: 400 });
       }
 
-      const absensiRows = await fetchAll<any>((from, to) =>
-        supabase
-          .from('absensi')
-          .select('tanggal, keterangan, tgl_mulai, tgl_selesai')
-          .eq('nama_key', nama_key)
-          .eq('univ_key', univ_key)
-          .order('tanggal', { ascending: true })
-          .range(from, to)
-      );
-
-      const izinRows = await fetchAll<any>((from, to) =>
-        supabase
-          .from('izin')
-          .select('tanggal, tgl_mulai, tgl_selesai')
-          .eq('nama_key', nama_key)
-          .eq('univ_key', univ_key)
-          .order('tanggal', { ascending: true })
-          .range(from, to)
-      );
+      const [absensiRows, izinRows, customHolidays] = await Promise.all([
+        fetchAll<any>((from, to) =>
+          supabase
+            .from('absensi')
+            .select('tanggal, keterangan, tgl_mulai, tgl_selesai')
+            .eq('nama_key', nama_key)
+            .eq('univ_key', univ_key)
+            .order('tanggal', { ascending: true })
+            .range(from, to)
+        ),
+        fetchAll<any>((from, to) =>
+          supabase
+            .from('izin')
+            .select('tanggal, tgl_mulai, tgl_selesai')
+            .eq('nama_key', nama_key)
+            .eq('univ_key', univ_key)
+            .order('tanggal', { ascending: true })
+            .range(from, to)
+        ),
+        getCustomHolidaysMap(),
+      ]);
 
       let tgl_mulai: string | null = null;
       let tgl_selesai: string | null = null;
@@ -586,7 +735,7 @@ export async function POST(req: NextRequest) {
 
       for (const d of allDates) {
         if (d >= cutoffDate) continue;
-        if (isWeekendOrFriday(d)) continue;
+        if (isWeekendOrFriday(d) || customHolidays.has(d)) continue;
         if (existingDates.has(d)) continue;
 
         const minMasuk = 15 + Math.floor(Math.random() * 14);
@@ -630,7 +779,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, inserted: rowsToInsert.length });
     }
 
-    // 3. Aksi Batalkan Isi Otomatis (Undo khusus baris [AUTO])
+    // 5. Batalkan Isi Otomatis (Undo khusus baris [AUTO])
     if (body.action === 'undo_backfill') {
       const nama = (body.nama || '').trim();
       const universitas = (body.universitas || '').trim();
@@ -664,7 +813,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, deleted: deletedRows?.length || 0 });
     }
 
-    // 4. Simpan Periode Mulai & Selesai Magang
+    // 6. Simpan Periode Mulai & Selesai Magang
     const { nama, universitas, tgl_mulai, tgl_selesai } = body;
 
     if (!nama || !universitas || !tgl_mulai || !tgl_selesai || tgl_selesai < tgl_mulai) {
