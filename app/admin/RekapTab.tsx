@@ -26,6 +26,36 @@ export function RekapTab() {
   const [processingAuto, setProcessingAuto] = useState(false);
   const [hideLibur, setHideLibur] = useState(false);
 
+  const [ttdJabatan, setTtdJabatan] = useState('Pembimbing / Pejabat Berwenang,');
+  const [ttdNama, setTtdNama] = useState('');
+  const [ttdNip, setTtdNip] = useState('Kanwil Ditjen Imigrasi Sulawesi Selatan');
+
+  useEffect(() => {
+    try {
+      const savedTtd = localStorage.getItem('rekap_ttd_pejabat');
+      if (savedTtd) {
+        const parsed = JSON.parse(savedTtd);
+        if (parsed.jabatan !== undefined) setTtdJabatan(parsed.jabatan);
+        if (parsed.nama !== undefined) setTtdNama(parsed.nama);
+        if (parsed.nip !== undefined) setTtdNip(parsed.nip);
+      }
+    } catch {}
+  }, []);
+
+  const updateTtdConfig = (field: 'jabatan' | 'nama' | 'nip', val: string) => {
+    const next = {
+      jabatan: field === 'jabatan' ? val : ttdJabatan,
+      nama: field === 'nama' ? val : ttdNama,
+      nip: field === 'nip' ? val : ttdNip,
+    };
+    if (field === 'jabatan') setTtdJabatan(val);
+    if (field === 'nama') setTtdNama(val);
+    if (field === 'nip') setTtdNip(val);
+    try {
+      localStorage.setItem('rekap_ttd_pejabat', JSON.stringify(next));
+    } catch {}
+  };
+
   const loadRekap = () => {
     setLoading(true);
     fetch(`/api/admin/data?tipe=rekap&q=${encodeURIComponent(search)}&active=${activeOnly}`)
@@ -235,6 +265,15 @@ export function RekapTab() {
     ctx.closePath();
   };
 
+  const fitText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string => {
+    if (ctx.measureText(text).width <= maxWidth) return text;
+    let t = text;
+    while (t.length > 0 && ctx.measureText(t + '...').width > maxWidth) {
+      t = t.slice(0, -1);
+    }
+    return t + '...';
+  };
+
   const drawFallbackEmblem = (ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number) => {
     ctx.save();
     ctx.beginPath();
@@ -265,45 +304,87 @@ export function RekapTab() {
     ctx.restore();
   };
 
+  // Unduh Kartu Profil PNG Resolusi Tinggi (2x Retina Scale - Rapi & Tajam)
   const downloadProfilePng = async (item: any) => {
+    const scale = 2;
+    const W = 920;
+    const H = 640;
     const canvas = document.createElement('canvas');
-    canvas.width = 860;
-    canvas.height = 600;
+    canvas.width = W * scale;
+    canvas.height = H * scale;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    ctx.scale(scale, scale);
+
+    // Latar belakang utama
     ctx.fillStyle = '#F4F6F8';
-    ctx.fillRect(0, 0, 860, 600);
+    ctx.fillRect(0, 0, W, H);
 
+    // Bingkai luar tipis
+    ctx.strokeStyle = '#CBD5E1';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, W - 2, H - 2);
+
+    // Header Wisdom Blue (#043666)
     ctx.fillStyle = '#043666';
-    ctx.fillRect(0, 0, 860, 150);
+    ctx.fillRect(0, 0, W, 156);
+
+    // Aksen garis Dignity Gold (#E9C170)
+    ctx.fillStyle = '#E9C170';
+    ctx.fillRect(0, 156, W, 6);
+
+    // Badge judul di kiri atas
+    drawRoundedRect(ctx, 44, 24, 340, 24, 4);
+    ctx.fillStyle = '#04315C';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(233, 193, 112, 0.45)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
     ctx.fillStyle = '#E9C170';
-    ctx.fillRect(0, 150, 860, 6);
+    ctx.font = 'bold 10.5px sans-serif';
+    ctx.fillText('KARTU PROFIL & REKAPITULASI PESERTA MAGANG', 54, 40);
 
-    ctx.fillStyle = '#E9C170';
-    ctx.font = 'bold 12px sans-serif';
-    ctx.fillText('KARTU PROFIL & REKAPITULASI KEHADIRAN MAGANG', 42, 42);
-
+    // Nama Peserta (anti-overflow)
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 28px sans-serif';
-    ctx.fillText(item.nama, 42, 82);
+    const safeNama = fitText(ctx, String(item.nama || '-'), 520);
+    ctx.fillText(safeNama, 44, 86);
 
-    ctx.fillStyle = '#CBD5E1';
-    ctx.font = '16px sans-serif';
-    ctx.fillText(item.universitas, 42, 114);
+    // Universitas (anti-overflow)
+    ctx.fillStyle = '#E2E8F0';
+    ctx.font = '600 15px sans-serif';
+    const safeUniv = fitText(ctx, String(item.universitas || '-'), 520);
+    ctx.fillText(safeUniv, 44, 114);
 
+    // Status Kedisiplinan di Header
+    const sp = item.spCount || 0;
+    const spLabel =
+      sp === 0
+        ? 'STATUS DISIPLIN: TERTIB (TANPA SP)'
+        : sp === 1
+        ? 'STATUS DISIPLIN: PERINGATAN SP-1'
+        : sp === 2
+        ? 'STATUS DISIPLIN: PERINGATAN SP-2'
+        : 'STATUS DISIPLIN: SP-3 (TERBLOKIR)';
+
+    ctx.fillStyle = sp === 0 ? '#86EFAC' : '#FCA5A5';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText(spLabel, 44, 138);
+
+    // Teks Instansi Kanan Atas
     ctx.save();
     ctx.textAlign = 'right';
     ctx.fillStyle = '#E9C170';
-    ctx.font = 'bold 13px sans-serif';
-    ctx.fillText('DIREKTORAT JENDERAL IMIGRASI', 722, 62);
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('KEMENTERIAN IMIGRASI DAN PEMASYARAKATAN', 776, 54);
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 15px sans-serif';
-    ctx.fillText('KANWIL SULAWESI SELATAN', 722, 85);
+    ctx.font = 'bold 14.5px sans-serif';
+    ctx.fillText('DITJEN IMIGRASI KANWIL SULSEL', 776, 76);
     ctx.fillStyle = '#CBD5E1';
     ctx.font = '12px sans-serif';
-    ctx.fillText('Sistem Presensi Peserta Magang', 722, 106);
+    ctx.fillText('Sistem Presensi Digital Peserta Magang', 776, 98);
     ctx.restore();
 
     const drawLogo = () =>
@@ -311,11 +392,11 @@ export function RekapTab() {
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
-          ctx.drawImage(img, 736, 32, 84, 84);
+          ctx.drawImage(img, 792, 34, 84, 84);
           resolve();
         };
         img.onerror = () => {
-          drawFallbackEmblem(ctx, 778, 74, 38);
+          drawFallbackEmblem(ctx, 834, 76, 38);
           resolve();
         };
         img.src = '/logo-imigrasi.png';
@@ -323,16 +404,17 @@ export function RekapTab() {
 
     await drawLogo();
 
+    // 2 Kotak Periode Magang
     const periodBoxes = [
-      { label: 'MULAI MAGANG', val: item.tgl_mulai || 'Belum diatur', accent: '#043666' },
-      { label: 'BERAKHIR MAGANG', val: item.tgl_selesai || 'Belum diatur', accent: '#BD944D' },
+      { label: 'TANGGAL MULAI MAGANG', val: item.tgl_mulai || 'Belum diatur', accent: '#043666' },
+      { label: 'TANGGAL BERAKHIR MAGANG', val: item.tgl_selesai || 'Belum diatur', accent: '#BD944D' },
     ];
 
     periodBoxes.forEach((pb, idx) => {
-      const x = 42 + idx * 398;
-      const y = 182;
-      const w = 378;
-      const h = 102;
+      const x = 44 + idx * 424;
+      const y = 188;
+      const w = 408;
+      const h = 98;
 
       drawRoundedRect(ctx, x, y, w, h, 10);
       ctx.fillStyle = '#FFFFFF';
@@ -342,29 +424,30 @@ export function RekapTab() {
       ctx.stroke();
 
       ctx.fillStyle = pb.accent;
-      ctx.fillRect(x, y + 10, 5, h - 20);
+      ctx.fillRect(x, y + 12, 5, h - 24);
 
       ctx.fillStyle = '#64748B';
-      ctx.font = 'bold 12px sans-serif';
-      ctx.fillText(pb.label, x + 24, y + 36);
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText(pb.label, x + 22, y + 36);
 
       ctx.fillStyle = '#0F172A';
-      ctx.font = 'bold 23px sans-serif';
-      ctx.fillText(String(pb.val), x + 24, y + 74);
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText(String(pb.val), x + 22, y + 72);
     });
 
+    // 4 Kotak Statistik Utama
     const stats = [
-      { label: 'TOTAL HADIR', val: `${item.count} Hari`, color: '#043666', bg: '#F8FAFC', border: '#CBD5E1' },
-      { label: 'IZIN / SAKIT', val: `${item.izinCount || 0} Hari`, color: '#92400E', bg: '#FFFBEB', border: '#FDE68A' },
-      { label: 'TIDAK HADIR', val: `${item.alphaCount || 0} Hari`, color: '#991B1B', bg: '#FEF2F2', border: '#FECACA' },
-      { label: 'TERAKHIR HADIR', val: item.terakhir || '-', color: '#04315C', bg: '#F8FAFC', border: '#CBD5E1' },
+      { label: 'TOTAL HADIR', val: `${item.count || 0} Hari`, color: '#043666', bg: '#FFFFFF', border: '#CBD5E1' },
+      { label: 'IZIN / SAKIT', val: `${item.izinCount || 0} Hari`, color: '#B45309', bg: '#FFFBEB', border: '#FDE68A' },
+      { label: 'TIDAK HADIR (ALPHA)', val: `${item.alphaCount || 0} Hari`, color: '#B91C1C', bg: '#FEF2F2', border: '#FECACA' },
+      { label: 'TERAKHIR HADIR', val: item.terakhir || '-', color: '#04315C', bg: '#FFFFFF', border: '#CBD5E1' },
     ];
 
     stats.forEach((st, idx) => {
-      const x = 42 + idx * 197;
-      const y = 306;
-      const w = 185;
-      const h = 115;
+      const x = 44 + idx * 212;
+      const y = 308;
+      const w = 196;
+      const h = 114;
 
       drawRoundedRect(ctx, x, y, w, h, 10);
       ctx.fillStyle = st.bg;
@@ -375,56 +458,499 @@ export function RekapTab() {
 
       ctx.fillStyle = '#475569';
       ctx.font = 'bold 11px sans-serif';
-      ctx.fillText(st.label, x + 16, y + 38);
+      ctx.fillText(st.label, x + 18, y + 38);
 
       ctx.fillStyle = st.color;
-      ctx.font = 'bold 22px sans-serif';
-      ctx.fillText(String(st.val), x + 16, y + 80);
+      ctx.font = 'bold 23px sans-serif';
+      ctx.fillText(String(st.val), x + 18, y + 80);
     });
 
+    // Bar Progres Masa Magang
     const prog = calcProgress(item.tgl_mulai, item.tgl_selesai);
+    const px = 44;
+    const py = 444;
+    const pw = 832;
+    const ph = 92;
+
+    drawRoundedRect(ctx, px, py, pw, ph, 10);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
+    ctx.strokeStyle = '#CBD5E1';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
     if (prog) {
-      const px = 42;
-      const py = 442;
-      const pw = 776;
-      const ph = 74;
-
-      drawRoundedRect(ctx, px, py, pw, ph, 10);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fill();
-      ctx.strokeStyle = '#CBD5E1';
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-
       ctx.fillStyle = '#0F172A';
       ctx.font = 'bold 14px sans-serif';
-      ctx.fillText(`Status: ${prog.status}`, px + 20, py + 28);
+      ctx.fillText(`Status Pelaksanaan: ${prog.status}`, px + 22, py + 32);
 
       ctx.save();
       ctx.textAlign = 'right';
-      ctx.fillStyle = '#475569';
+      ctx.fillStyle = '#043666';
       ctx.font = 'bold 13px sans-serif';
-      ctx.fillText(`Progres: ${prog.pct}% (${prog.totalDays} hari total | Sisa ${prog.remaining} hari)`, px + pw - 20, py + 28);
+      ctx.fillText(
+        `Progres Durasi: ${prog.pct}% (${prog.totalDays} hari kalender | Sisa ${prog.remaining} hari)`,
+        px + pw - 22,
+        py + 32
+      );
       ctx.restore();
 
-      drawRoundedRect(ctx, px + 20, py + 42, pw - 40, 14, 7);
+      drawRoundedRect(ctx, px + 22, py + 50, pw - 44, 16, 8);
       ctx.fillStyle = '#E2E8F0';
       ctx.fill();
 
-      const fillW = Math.max(14, Math.round(((pw - 40) * prog.pct) / 100));
-      drawRoundedRect(ctx, px + 20, py + 42, fillW, 14, 7);
+      const fillW = Math.max(16, Math.round(((pw - 44) * prog.pct) / 100));
+      drawRoundedRect(ctx, px + 22, py + 50, fillW, 16, 8);
       ctx.fillStyle = '#043666';
       ctx.fill();
+    } else {
+      ctx.fillStyle = '#64748B';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillText('Periode tanggal mulai dan berakhir magang belum diatur pada sistem.', px + 22, py + 52);
     }
 
-    ctx.fillStyle = '#64748B';
+    // Footer bawah
+    ctx.fillStyle = '#04315C';
+    ctx.fillRect(0, H - 54, W, 54);
+    ctx.fillStyle = '#BD944D';
+    ctx.fillRect(0, H - 54, W, 3);
+
+    const todayStr = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    ctx.fillStyle = '#E2E8F0';
     ctx.font = '12px sans-serif';
-    ctx.fillText(`Dicetak melalui Sistem Presensi Magang Ditjen Imigrasi Kanwil Sulsel | ${new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)}`, 42, 562);
+    ctx.fillText(
+      `Dokumen Resmi Sistem Presensi Magang — Kanwil Ditjen Imigrasi Sulawesi Selatan`,
+      44,
+      H - 22
+    );
+
+    ctx.save();
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#E9C170';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText(`Dicetak: ${todayStr}`, W - 44, H - 22);
+    ctx.restore();
 
     const link = document.createElement('a');
     link.download = `KartuProfil_${item.nama.replace(/\s+/g, '_')}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
+  };
+
+  // Cetak / Simpan PDF Resmi (A4 Multi-Halaman dengan Seluruh Tabel Daftar Hadir)
+  const printFullPdfReport = (item: any, calList: any[]) => {
+    if (loadingCalendar) {
+      alert('Mohon tunggu sejenak, daftar kehadiran sedang dimuat...');
+      return;
+    }
+
+    const prog = calcProgress(item.tgl_mulai, item.tgl_selesai);
+    const todayStr = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const originUrl = window.location.origin;
+
+    // Urutkan dari tanggal paling awal ke terbaru untuk laporan cetak resmi
+    const rowsForPrint = [...calList]
+      .filter((c) => (hideLibur ? c.status !== 'LIBUR' : true))
+      .reverse();
+
+    const esc = (s: any) =>
+      String(s ?? '-')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const sp = item.spCount || 0;
+    const spText =
+      sp === 0 ? 'Tertib (Tanpa SP)' : sp === 1 ? 'SP-1' : sp === 2 ? 'SP-2' : 'SP-3 (Terblokir)';
+
+    const tableRowsHtml = rowsForPrint
+      .map((c, i) => {
+        let badgeStyle = 'background:#F1F5F9;color:#475569;border:1px solid #CBD5E1;';
+        let statusLabel = c.status;
+
+        if (c.status === 'HADIR') {
+          badgeStyle = 'background:#DCFCE7;color:#166534;border:1px solid #86EFAC;';
+          statusLabel = 'HADIR';
+        } else if (c.status === 'IZIN') {
+          badgeStyle = 'background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;';
+          statusLabel = c.jenis_izin ? `IZIN (${c.jenis_izin.toUpperCase()})` : 'IZIN';
+        } else if (c.status === 'TIDAK_HADIR') {
+          badgeStyle = 'background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;';
+          statusLabel = 'TIDAK HADIR';
+        } else if (c.status === 'BELUM_ABSEN') {
+          badgeStyle = 'background:#FEF9C3;color:#854D0E;border:1px solid #FDE047;';
+          statusLabel = 'BELUM ABSEN';
+        } else if (c.status === 'LIBUR') {
+          badgeStyle = 'background:#F1F5F9;color:#64748B;border:1px solid #E2E8F0;';
+          statusLabel = 'LIBUR';
+        }
+
+        const tapBadge = c.tidak_absen_pulang
+          ? `<span style="display:inline-block;margin-left:5px;padding:1px 5px;font-size:8.5px;font-weight:800;border-radius:3px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;">TIDAK ABSEN PULANG</span>`
+          : '';
+
+        const rowBg =
+          c.status === 'LIBUR'
+            ? 'background:#F8FAFC;color:#64748B;'
+            : c.status === 'TIDAK_HADIR'
+            ? 'background:#FEF2F2;'
+            : i % 2 === 1
+            ? 'background:#F8FAFC;'
+            : 'background:#FFFFFF;';
+
+        return `
+          <tr style="${rowBg}">
+            <td style="text-align:center;font-weight:600;">${i + 1}</td>
+            <td style="font-weight:700;white-space:nowrap;">${esc(c.tanggal)}</td>
+            <td style="white-space:nowrap;">${esc(c.hari)}</td>
+            <td>
+              <span style="display:inline-block;padding:2px 7px;font-size:9.5px;font-weight:800;border-radius:4px;${badgeStyle}">
+                ${esc(statusLabel)}
+              </span>
+            </td>
+            <td style="text-align:center;font-weight:700;">${esc(c.jam_masuk)}</td>
+            <td style="text-align:center;font-weight:700;">
+              ${esc(c.jam_keluar)}${tapBadge}
+            </td>
+            <td>${esc(c.keterangan)}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Laporan_Kehadiran_${esc(item.nama.replace(/\s+/g, '_'))}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 0mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+      color: #0F172A;
+      background: #FFFFFF;
+      margin: 0;
+      padding: 0;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .no-print-bar {
+      background: #043666;
+      color: #FFFFFF;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 3px solid #E9C170;
+      margin-bottom: 18px;
+    }
+    .no-print-bar button {
+      background: #E9C170;
+      color: #04315C;
+      border: none;
+      padding: 8px 16px;
+      font-weight: 800;
+      font-size: 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .page-wrap {
+      max-width: 190mm;
+      margin: 0 auto;
+    }
+    .kop-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 3px solid #043666;
+      padding-bottom: 12px;
+      margin-bottom: 4px;
+    }
+    .kop-header img {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+    }
+    .kop-text {
+      flex: 1;
+    }
+    .kop-text .kementerian {
+      font-size: 11px;
+      font-weight: 800;
+      color: #043666;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .kop-text .instansi {
+      font-size: 16px;
+      font-weight: 900;
+      color: #0F172A;
+      margin-top: 2px;
+      text-transform: uppercase;
+    }
+    .kop-text .sub {
+      font-size: 11px;
+      color: #475569;
+      margin-top: 2px;
+    }
+    .kop-gold-line {
+      height: 2px;
+      background: #BD944D;
+      margin-bottom: 16px;
+    }
+    .judul-dokumen {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .judul-dokumen h1 {
+      font-size: 14px;
+      font-weight: 900;
+      color: #043666;
+      margin: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .judul-dokumen p {
+      font-size: 10.5px;
+      color: #64748B;
+      margin: 3px 0 0 0;
+    }
+    .identitas-box {
+      border: 1px solid #CBD5E1;
+      border-left: 4px solid #043666;
+      border-radius: 6px;
+      padding: 12px 16px;
+      background: #F8FAFC;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 24px;
+      margin-bottom: 14px;
+    }
+    .identitas-item {
+      display: flex;
+      font-size: 11px;
+    }
+    .identitas-label {
+      width: 125px;
+      font-weight: 700;
+      color: #475569;
+      flex-shrink: 0;
+    }
+    .identitas-val {
+      font-weight: 800;
+      color: #0F172A;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .stat-card {
+      border: 1px solid #CBD5E1;
+      border-radius: 6px;
+      padding: 10px 12px;
+      text-align: center;
+      background: #FFFFFF;
+    }
+    .stat-card .lbl {
+      font-size: 9.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #64748B;
+    }
+    .stat-card .val {
+      font-size: 18px;
+      font-weight: 900;
+      margin-top: 4px;
+    }
+    table.Attendance {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10.5px;
+    }
+    table.Attendance thead {
+      display: table-header-group;
+    }
+    table.Attendance tr {
+      page-break-inside: avoid;
+    }
+    table.Attendance th {
+      background: #043666;
+      color: #FFFFFF;
+      font-weight: 800;
+      text-transform: uppercase;
+      font-size: 9.5px;
+      letter-spacing: 0.05em;
+      padding: 8px 8px;
+      border: 1px solid #043666;
+      text-align: left;
+    }
+    table.Attendance td {
+      padding: 6.5px 8px;
+      border: 1px solid #CBD5E1;
+      vertical-align: middle;
+    }
+    .ttd-wrap {
+      margin-top: 28px;
+      display: flex;
+      justify-content: space-between;
+      page-break-inside: avoid;
+      font-size: 11px;
+    }
+    .ttd-box {
+      width: 220px;
+      text-align: center;
+    }
+    .ttd-space {
+      height: 64px;
+    }
+    @media print {
+      .no-print-bar {
+        display: none !important;
+      }
+      .page-wrap {
+        max-width: 100%;
+        padding: 14mm 14mm 16mm 14mm;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print-bar">
+    <div>
+      <strong>Pratinjau Cetak PDF Resmi</strong> — Pilih tujuan <em>"Save as PDF" / "Simpan sebagai PDF"</em> pada jendela cetak browser Anda.
+    </div>
+    <button onclick="window.print()">Cetak / Simpan PDF</button>
+  </div>
+
+  <div class="page-wrap">
+    <div class="kop-header">
+      <img src="${originUrl}/logo-imigrasi.png" alt="Logo Imigrasi" onerror="this.style.display='none'" />
+      <div class="kop-text">
+        <div class="kementerian">Kementerian Imigrasi dan Pemasyarakatan Republik Indonesia</div>
+        <div class="instansi">Direktorat Jenderal Imigrasi — Kantor Wilayah Sulawesi Selatan</div>
+        <div class="sub">Laporan Resmi Rekapitulasi & Rincian Presensi Harian Peserta Magang</div>
+      </div>
+    </div>
+    <div class="kop-gold-line"></div>
+
+    <div class="judul-dokumen">
+      <h1>Rekapitulasi Kehadiran Peserta Magang</h1>
+      <p>Tanggal Cetak Dokumen: ${esc(todayStr)}</p>
+    </div>
+
+    <div class="identitas-box">
+      <div class="identitas-item">
+        <span class="identitas-label">Nama Lengkap</span>
+        <span class="identitas-val">: ${esc(item.nama)}</span>
+      </div>
+      <div class="identitas-item">
+        <span class="identitas-label">Mulai Magang</span>
+        <span class="identitas-val">: ${esc(item.tgl_mulai || 'Belum diatur')}</span>
+      </div>
+      <div class="identitas-item">
+        <span class="identitas-label">Universitas / Instansi</span>
+        <span class="identitas-val">: ${esc(item.universitas)}</span>
+      </div>
+      <div class="identitas-item">
+        <span class="identitas-label">Berakhir Magang</span>
+        <span class="identitas-val">: ${esc(item.tgl_selesai || 'Belum diatur')}</span>
+      </div>
+      <div class="identitas-item">
+        <span class="identitas-label">Status Kedisiplinan</span>
+        <span class="identitas-val">: ${esc(spText)}</span>
+      </div>
+      <div class="identitas-item">
+        <span class="identitas-label">Progres Durasi</span>
+        <span class="identitas-val">: ${prog ? `${prog.status} (${prog.pct}% — Sisa ${prog.remaining} hari)` : '-'}</span>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="lbl">Total Hadir</div>
+        <div class="val" style="color:#043666;">${item.count || 0} Hari</div>
+      </div>
+      <div class="stat-card" style="background:#FFFBEB;border-color:#FDE68A;">
+        <div class="lbl" style="color:#92400E;">Total Izin / Sakit</div>
+        <div class="val" style="color:#B45309;">${item.izinCount || 0} Hari</div>
+      </div>
+      <div class="stat-card" style="background:#FEF2F2;border-color:#FECACA;">
+        <div class="lbl" style="color:#991B1B;">Tidak Hadir (Alpha)</div>
+        <div class="val" style="color:#B91C1C;">${item.alphaCount || 0} Hari</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Terakhir Hadir</div>
+        <div class="val" style="color:#0F172A;font-size:15px;margin-top:7px;">${esc(item.terakhir || '-')}</div>
+      </div>
+    </div>
+
+    <table class="Attendance">
+      <thead>
+        <tr>
+          <th style="width:34px;text-align:center;">No</th>
+          <th style="width:88px;">Tanggal</th>
+          <th style="width:68px;">Hari</th>
+          <th style="width:115px;">Status</th>
+          <th style="width:72px;text-align:center;">Jam Masuk</th>
+          <th style="width:120px;text-align:center;">Jam Keluar</th>
+          <th>Keterangan</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${
+          tableRowsHtml ||
+          `<tr><td colspan="7" style="text-align:center;padding:20px;color:#64748B;">Tidak ada rincian tanggal untuk ditampilkan.</td></tr>`
+        }
+      </tbody>
+    </table>
+
+    <div class="ttd-wrap">
+      <div class="ttd-box">
+        <div>Peserta Magang,</div>
+        <div class="ttd-space"></div>
+        <div style="font-weight:800;text-decoration:underline;">${esc(item.nama)}</div>
+        <div style="color:#475569;font-size:10px;margin-top:2px;">${esc(item.universitas)}</div>
+      </div>
+      <div class="ttd-box">
+        <div>Makassar, <span contenteditable="true" style="outline:none;">${esc(todayStr)}</span><br/><span contenteditable="true" style="outline:none;">${esc(ttdJabatan || 'Pembimbing / Pejabat Berwenang,')}</span></div>
+        <div class="ttd-space"></div>
+        <div contenteditable="true" style="font-weight:800;text-decoration:underline;outline:none;">${esc(ttdNama.trim() ? ttdNama.trim() : '( ................................................ )')}</div>
+        <div contenteditable="true" style="color:#475569;font-size:10px;margin-top:2px;outline:none;">${esc(ttdNip || 'Kanwil Ditjen Imigrasi Sulawesi Selatan')}</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+      }, 350);
+    };
+  </script>
+</body>
+</html>`;
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      alert('Pop-up diblokir oleh browser. Izinkan pop-up pada situs ini untuk mencetak laporan PDF.');
+      return;
+    }
+    printWin.document.open();
+    printWin.document.write(htmlContent);
+    printWin.document.close();
   };
 
   return (
@@ -910,6 +1436,50 @@ export function RekapTab() {
                   </div>
                 </div>
 
+                <div className="px-5 sm:px-6 py-3 bg-slate-50 border-t border-slate-200 shrink-0">
+                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-[#043666] mb-2">
+                    Pengaturan Penandatangan Cetak PDF (Otomatis Tersimpan)
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
+                        Jabatan Penandatangan
+                      </label>
+                      <input
+                        type="text"
+                        value={ttdJabatan}
+                        onChange={(e) => updateTtdConfig('jabatan', e.target.value)}
+                        placeholder="Pembimbing / Pejabat Berwenang,"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-900 focus:outline-none focus:border-[#043666]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
+                        Nama Pejabat / Pembimbing
+                      </label>
+                      <input
+                        type="text"
+                        value={ttdNama}
+                        onChange={(e) => updateTtdConfig('nama', e.target.value)}
+                        placeholder="Kosongkan jika ingin titik-titik (...)"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-900 focus:outline-none focus:border-[#043666]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
+                        NIP / Baris Bawah Tanda Tangan
+                      </label>
+                      <input
+                        type="text"
+                        value={ttdNip}
+                        onChange={(e) => updateTtdConfig('nip', e.target.value)}
+                        placeholder="NIP. ... / Kanwil Ditjen Imigrasi Sulsel"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-900 focus:outline-none focus:border-[#043666]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="px-5 sm:px-6 py-3.5 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
                   <button
                     type="button"
@@ -927,10 +1497,10 @@ export function RekapTab() {
                     </a>
                     <button
                       type="button"
-                      onClick={() => window.print()}
+                      onClick={() => printFullPdfReport(profileItem, calendarData)}
                       className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider bg-slate-800 text-white rounded-md hover:bg-slate-900"
                     >
-                      Cetak / PDF
+                      Cetak / PDF Lengkap
                     </button>
                     <button
                       type="button"
