@@ -2,8 +2,26 @@
 
 import { useState, useEffect } from 'react';
 
+const cleanKet = (val?: string | null) =>
+  val
+    ? val
+        .replace(/\[TAP\]/g, '')
+        .replace(/\[RESET\]/g, '')
+        .replace(/\[AUTO\]/g, '')
+        .replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '')
+        .trim()
+    : '';
+
 export function HariIniTab() {
-  const [data, setData] = useState<{ hadir: any[]; izin: any[]; belum: any[] } | null>(null);
+  const [data, setData] = useState<{
+    tanggal?: string;
+    hari?: string;
+    is_libur?: boolean;
+    keterangan_libur?: string | null;
+    hadir: any[];
+    izin: any[];
+    belum: any[];
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,36 +42,48 @@ export function HariIniTab() {
   }
   if (!data) return null;
 
-  const nowHm = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(11, 16);
-  const isLewatJamPulang = nowHm >= '18:00';
   const belumPulang = data.hadir.filter((h) => !h.jam_keluar);
-
-  const cleanKet = (ket?: string | null) =>
-    ket ? ket.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').replace(/\[AUTO\]/g, '').replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '').trim() || '-' : '-';
 
   return (
     <div className="space-y-8">
+      {/* Banner Pemberitahuan jika Hari Ini adalah Hari Libur */}
+      {data.is_libur && (
+        <div className="bg-[#043666] text-white border-l-4 border-[#E9C170] rounded-lg p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#E9C170] block">
+              Status Kalender Kerja Hari Ini ({data.hari}, {data.tanggal})
+            </span>
+            <p className="text-sm sm:text-base font-extrabold mt-0.5">
+              {data.keterangan_libur || 'Hari Libur (Jumat / Akhir Pekan)'} — Tidak Ada Kewajiban Presensi
+            </p>
+          </div>
+          <span className="px-3 py-1 text-xs font-extrabold uppercase tracking-wider rounded bg-[#E9C170] text-[#04315C]">
+            HARI LIBUR
+          </span>
+        </div>
+      )}
+
       {/* Ringkasan Statistik Hari Ini */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-slate-50 border border-slate-200 border-l-4 border-l-[#043666] rounded-lg p-4">
           <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Sudah Hadir</p>
           <p className="text-2xl font-black text-[#043666] mt-1">{data.hadir.length}</p>
         </div>
-        <div className={`bg-slate-50 border border-slate-200 border-l-4 ${isLewatJamPulang && belumPulang.length > 0 ? 'border-l-red-600' : 'border-l-[#BD944D]'} rounded-lg p-4`}>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            {isLewatJamPulang ? 'Tidak Absen Pulang' : 'Belum Pulang'}
-          </p>
-          <p className={`text-2xl font-black mt-1 ${isLewatJamPulang && belumPulang.length > 0 ? 'text-red-700' : 'text-slate-900'}`}>
-            {belumPulang.length}
-          </p>
+        <div className="bg-slate-50 border border-slate-200 border-l-4 border-l-[#BD944D] rounded-lg p-4">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Belum Pulang</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{belumPulang.length}</p>
         </div>
         <div className="bg-slate-50 border border-slate-200 border-l-4 border-l-amber-600 rounded-lg p-4">
           <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Izin / Sakit</p>
           <p className="text-2xl font-black text-slate-900 mt-1">{data.izin.length}</p>
         </div>
         <div className="bg-slate-50 border border-slate-200 border-l-4 border-l-slate-400 rounded-lg p-4">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Belum Absen</p>
-          <p className="text-2xl font-black text-slate-700 mt-1">{data.belum.length}</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            {data.is_libur ? 'Status Hari Ini' : 'Belum Absen'}
+          </p>
+          <p className="text-2xl font-black text-slate-700 mt-1">
+            {data.is_libur ? 'LIBUR' : data.belum.length}
+          </p>
         </div>
       </div>
 
@@ -79,44 +109,33 @@ export function HariIniTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-800">
-              {data.hadir.map((h, i) => {
-                const rawKet = String(h.keterangan || '');
-                const hasTap = !rawKet.includes('[RESET]') && (rawKet.includes('[TAP]') || (!h.jam_keluar && isLewatJamPulang));
-                return (
-                  <tr key={i} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-5 py-3.5 font-bold text-slate-900">{h.nama}</td>
-                    <td className="px-5 py-3.5 text-slate-700">{h.universitas}</td>
-                    <td className="px-5 py-3.5">
-                      <span className="inline-block px-2.5 py-1 text-xs font-bold rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        {String(h.jam_masuk).slice(0, 5)}
+              {data.hadir.map((h, i) => (
+                <tr key={i} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="px-5 py-3.5 font-bold text-slate-900">{h.nama}</td>
+                  <td className="px-5 py-3.5 text-slate-700">{h.universitas}</td>
+                  <td className="px-5 py-3.5">
+                    <span className="inline-block px-2.5 py-1 text-xs font-bold rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      {String(h.jam_masuk).slice(0, 5)}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {h.jam_keluar ? (
+                      <span className="inline-block px-2.5 py-1 text-xs font-bold rounded bg-slate-100 text-slate-800 border border-slate-300">
+                        {String(h.jam_keluar).slice(0, 5)}
                       </span>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {h.jam_keluar ? (
-                          <span className="inline-block px-2.5 py-1 text-xs font-bold rounded bg-slate-100 text-slate-800 border border-slate-300">
-                            {String(h.jam_keluar).slice(0, 5)}
-                          </span>
-                        ) : hasTap ? (
-                          <span className="text-slate-400 font-bold">-</span>
-                        ) : (
-                          <span className="text-xs font-semibold text-amber-700">Belum Pulang</span>
-                        )}
-                        {hasTap && (
-                          <span className="inline-block px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded bg-red-100 text-red-800 border border-red-300">
-                            Tidak Absen Pulang
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5 text-slate-600">{cleanKet(h.keterangan)}</td>
-                  </tr>
-                );
-              })}
+                    ) : (
+                      <span className="text-xs font-semibold text-amber-700">Belum Pulang</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 text-slate-600">{cleanKet(h.keterangan) || '-'}</td>
+                </tr>
+              ))}
               {data.hadir.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-5 py-8 text-center text-xs font-medium text-slate-400">
-                    Belum ada peserta yang tercatat hadir hari ini.
+                    {data.is_libur
+                      ? `Hari ini adalah ${data.keterangan_libur || 'hari libur'}.`
+                      : 'Belum ada peserta yang tercatat hadir hari ini.'}
                   </td>
                 </tr>
               )}
@@ -125,16 +144,16 @@ export function HariIniTab() {
         </div>
       </section>
 
-      {/* Seksi Belum Pulang / Tidak Absen Pulang */}
+      {/* Seksi Belum Pulang */}
       <section className="border border-slate-200 rounded-lg overflow-hidden bg-white">
         <div className="bg-slate-50 px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className={`w-2 h-4 ${isLewatJamPulang && belumPulang.length > 0 ? 'bg-red-600' : 'bg-[#BD944D]'} rounded-sm inline-block`}></span>
+            <span className="w-2 h-4 bg-[#BD944D] rounded-sm inline-block"></span>
             <h2 className="text-xs font-extrabold uppercase tracking-wider text-[#043666]">
-              {isLewatJamPulang ? 'Peserta Tidak Absen Pulang Hari Ini (Lewat 18:00 WITA)' : 'Peserta Belum Absen Pulang'}
+              Peserta Belum Absen Pulang
             </h2>
           </div>
-          <span className={`px-2.5 py-0.5 text-[11px] font-bold rounded ${isLewatJamPulang && belumPulang.length > 0 ? 'bg-red-100 text-red-800' : 'bg-slate-200 text-slate-800'}`}>
+          <span className="px-2.5 py-0.5 text-[11px] font-bold rounded bg-slate-200 text-slate-800">
             {belumPulang.length} Orang
           </span>
         </div>
@@ -144,7 +163,7 @@ export function HariIniTab() {
               {belumPulang.map((b, i) => (
                 <div
                   key={i}
-                  className={`p-3.5 border border-slate-200 border-l-4 ${isLewatJamPulang ? 'border-l-red-600 bg-red-50/30' : 'border-l-[#043666] bg-slate-50/60'} rounded-md flex items-center justify-between gap-3`}
+                  className="p-3.5 border border-slate-200 border-l-4 border-l-[#043666] rounded-md bg-slate-50/60 flex items-center justify-between gap-3"
                 >
                   <div className="min-w-0">
                     <div className="font-bold text-sm text-slate-900 truncate">{b.nama}</div>
@@ -152,15 +171,9 @@ export function HariIniTab() {
                       {b.universitas}
                     </div>
                   </div>
-                  {isLewatJamPulang ? (
-                    <span className="shrink-0 px-2 py-1 text-[10px] font-extrabold uppercase rounded bg-red-100 text-red-800 border border-red-300">
-                      Tidak Absen Pulang
-                    </span>
-                  ) : (
-                    <span className="shrink-0 px-2.5 py-1 text-[11px] font-bold rounded bg-[#043666] text-[#E9C170]">
-                      Masuk {String(b.jam_masuk).slice(0, 5)}
-                    </span>
-                  )}
+                  <span className="shrink-0 px-2.5 py-1 text-[11px] font-bold rounded bg-[#043666] text-[#E9C170]">
+                    Masuk {String(b.jam_masuk).slice(0, 5)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -206,7 +219,7 @@ export function HariIniTab() {
                       {iz.jenis}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5 text-slate-600">{(iz.keterangan ? String(iz.keterangan).replace(/\[GRP:[a-zA-Z0-9_-]+\]/g, '').trim() : '') || '-'}</td>
+                  <td className="px-5 py-3.5 text-slate-600">{cleanKet(iz.keterangan) || '-'}</td>
                   <td className="px-5 py-3.5">
                     {iz.link_surat ? (
                       <a
@@ -249,7 +262,11 @@ export function HariIniTab() {
           </span>
         </div>
         <div className="p-5">
-          {data.belum.length > 0 ? (
+          {data.is_libur ? (
+            <div className="text-center text-xs font-bold text-[#043666] py-4">
+              {data.keterangan_libur || 'Hari Libur (Jumat / Akhir Pekan)'} — Peserta tidak diwajibkan melakukan presensi hari ini.
+            </div>
+          ) : data.belum.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {data.belum.map((b, i) => (
                 <div

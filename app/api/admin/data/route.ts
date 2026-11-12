@@ -151,6 +151,16 @@ async function handleLog() {
 
 async function handleSummary() {
   const tanggal = getTodayDate();
+  const hari = getDayName(tanggal);
+  const customHolidays = await getCustomHolidaysMap();
+  const liburNasional = customHolidays.get(tanggal);
+  const liburRutin = isWeekendOrFriday(tanggal);
+  const isLibur = Boolean(liburNasional || liburRutin);
+  const keteranganLibur = liburNasional
+    ? `Libur Nasional: ${liburNasional}`
+    : liburRutin
+    ? `Hari Libur (${hari})`
+    : null;
 
   const { data: hadir, error: errHadir } = await supabase
     .from('absensi')
@@ -183,7 +193,9 @@ async function handleSummary() {
   const hadirKeys = new Set((hadir || []).map((h) => `${h.nama.toLowerCase().trim()}|${h.universitas.toLowerCase().trim()}`));
   const izinKeys = new Set((izin || []).map((i) => `${i.nama.toLowerCase().trim()}|${i.universitas.toLowerCase().trim()}`));
 
-  const belum = uniqueAktif.filter((a) => !hadirKeys.has(`${a.nama_key}|${a.univ_key}`) && !izinKeys.has(`${a.nama_key}|${a.univ_key}`));
+  const belum = isLibur
+    ? []
+    : uniqueAktif.filter((a) => !hadirKeys.has(`${a.nama_key}|${a.univ_key}`) && !izinKeys.has(`${a.nama_key}|${a.univ_key}`));
 
   const { data: logsData } = await supabase
     .from('admin_log')
@@ -191,7 +203,16 @@ async function handleSummary() {
     .order('waktu', { ascending: false })
     .limit(50);
 
-  return NextResponse.json({ hadir: hadir || [], izin: izin || [], belum, logs: logsData || [] });
+  return NextResponse.json({
+    tanggal,
+    hari,
+    is_libur: isLibur,
+    keterangan_libur: keteranganLibur,
+    hadir: hadir || [],
+    izin: izin || [],
+    belum,
+    logs: logsData || [],
+  });
 }
 
 async function handleRekap(params: URLSearchParams) {
