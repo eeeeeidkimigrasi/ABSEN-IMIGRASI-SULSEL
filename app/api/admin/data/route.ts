@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getTodayDate } from '@/lib/waktu';
+import { getTodayDate, getDayName } from '@/lib/waktu';
 import { fetchAll } from '@/lib/fetch-all';
 
 const ACTIVE_DAYS = 14;
@@ -9,6 +9,36 @@ const BATAS_JAM_PULANG = '18:00';
 function getCurrentTimeWita(): string {
   const wita = new Date(Date.now() + 8 * 3600 * 1000);
   return wita.toISOString().slice(11, 16);
+}
+
+function getThresholdDateWita(daysAgo: number): string {
+  const wita = new Date(Date.now() + 8 * 3600 * 1000);
+  wita.setUTCDate(wita.getUTCDate() - daysAgo);
+  return wita.toISOString().slice(0, 10);
+}
+
+// Jumat (5), Sabtu (6), Minggu (0) adalah hari libur
+function isWeekendOrFriday(dateStr: string): boolean {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return day === 0 || day === 5 || day === 6;
+}
+
+function generateDateRange(startStr: string, endStr: string): string[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startStr) || !/^\d{4}-\d{2}-\d{2}$/.test(endStr)) {
+    return [];
+  }
+  const dates: string[] = [];
+  const [sy, sm, sd] = startStr.split('-').map(Number);
+  const [ey, em, ed] = endStr.split('-').map(Number);
+  const cur = new Date(Date.UTC(sy, sm - 1, sd));
+  const end = new Date(Date.UTC(ey, em - 1, ed));
+
+  while (cur <= end && dates.length < 730) {
+    dates.push(cur.toISOString().slice(0, 10));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return dates;
 }
 
 export async function GET(req: NextRequest) {
@@ -20,6 +50,8 @@ export async function GET(req: NextRequest) {
       return await handleSummary();
     } else if (tipe === 'rekap') {
       return await handleRekap(searchParams);
+    } else if (tipe === 'individu') {
+      return await handleIndividu(searchParams);
     } else if (tipe === 'riwayat') {
       return await handleRiwayat(searchParams);
     } else if (tipe === 'izin') {
@@ -62,9 +94,7 @@ async function handleSummary() {
     .eq('tanggal', tanggal);
   if (errIzin) throw new Error(errIzin.message);
 
-  const thresholdDate = new Date();
-  thresholdDate.setDate(thresholdDate.getDate() - ACTIVE_DAYS);
-  const thresholdStr = thresholdDate.toISOString().split('T')[0];
+  const thresholdStr = getThresholdDateWita(ACTIVE_DAYS);
 
   const aktif = await fetchAll<any>((from, to) =>
     supabase
@@ -98,6 +128,7 @@ async function handleRekap(params: URLSearchParams) {
   const onlyActive = params.get('active') === 'true';
   const todayStr = getTodayDate();
   const jamSekarang = getCurrentTimeWita();
+  const thresholdStr = getThresholdDateWita(ACTIVE_DAYS);
 
   const data = await fetchAll<any>((from, to) => {
     let q = supabase
@@ -134,33 +165,40 @@ async function handleRekap(params: URLSearchParams) {
     izinCountMap.set(k, cur);
   }
 
+  const hadirDateSet = new Set<string>();
+
   const rekapMap = new Map<
     string,
     {
+      key: string;
       nama: string;
       universitas: string;
       count: number;
+      autoCount: number;
       izinCount: number;
+      alphaCount: number;
       spCount: number;
+      pertama: string;
       terakhir: string;
       tgl_mulai: string | null;
       tgl_selesai: string | null;
     }
   >();
 
-  const now = new Date();
-  const threshold = new Date();
-  threshold.setDate(now.getDate() - ACTIVE_DAYS);
-
   for (const row of data) {
     const key = `${row.nama_key}|${row.univ_key}`;
+    hadirDateSet.add(`${key}|${row.tanggal}`);
     const izInfo = izinCountMap.get(key);
     const entry = rekapMap.get(key) || {
+      key,
       nama: row.nama,
       universitas: row.universitas,
       count: 0,
+      autoCount: 0,
       izinCount: izInfo?.count || 0,
+      alphaCount: 0,
       spCount: 0,
+      pertama: row.tanggal,
       terakhir: row.tanggal,
       tgl_mulai: row.tgl_mulai || izInfo?.tgl_mulai || null,
       tgl_selesai: row.tgl_selesai || izInfo?.tgl_selesai || null,
@@ -168,10 +206,13 @@ async function handleRekap(params: URLSearchParams) {
     entry.count++;
 
     const ket = String(row.keterangan || '');
+    if (ket.includes('[AUTO]')) {
+      entry.autoCount++;
+    }
+
     const hasIzinSameDay = izinDateSet.has(`${key}|${row.tanggal}`);
 
-    // Aturan: jika tidak di-reset dan tidak sedang izin di tanggal tersebut
-    if (!ket.includes('[RESET]')) {
+    if (!ket.includes('[RESET]') && !ket.includes('[AUTO]')) {
       const hasTapTag = ket.includes('[TAP]');
       const isPastUnclosed = row.tanggal < todayStr && !row.jam_keluar && !hasIzinSameDay;
       const isTodayLateUnclosed =
@@ -182,20 +223,205 @@ async function handleRekap(params: URLSearchParams) {
       }
     }
 
+    if (row.tanggal < entry.pertama) entry.pertama = row.tanggal;
     if (row.tanggal > entry.terakhir) entry.terakhir = row.tanggal;
     if (row.tgl_mulai && !entry.tgl_mulai) entry.tgl_mulai = row.tgl_mulai;
     if (row.tgl_selesai && !entry.tgl_selesai) entry.tgl_selesai = row.tgl_selesai;
     rekapMap.set(key, entry);
   }
 
+  for (const entry of Array.from(rekapMap.values())) {
+    const startRange = entry.tgl_mulai || entry.pertama;
+    const rawEnd = entry.tgl_selesai && entry.tgl_selesai < todayStr ? entry.tgl_selesai : todayStr;
+    if (startRange && rawEnd >= startRange) {
+      const allDates = generateDateRange(startRange, rawEnd);
+      let alpha = 0;
+      for (const d of allDates) {
+        if (isWeekendOrFriday(d)) continue;
+        // Jika hari ini masih sebelum jam 18:00 WITA, jangan langsung dihitung Alpha
+        if (d === todayStr && jamSekarang < BATAS_JAM_PULANG) continue;
+        if (!hadirDateSet.has(`${entry.key}|${d}`) && !izinDateSet.has(`${entry.key}|${d}`)) {
+          alpha++;
+        }
+      }
+      entry.alphaCount = alpha;
+    }
+  }
+
   let result = Array.from(rekapMap.values());
 
   if (onlyActive) {
-    const thresholdStr = threshold.toISOString().split('T')[0];
     result = result.filter((r) => r.terakhir >= thresholdStr);
   }
 
   return NextResponse.json(result);
+}
+
+async function handleIndividu(params: URLSearchParams) {
+  const nama_key = (params.get('nama') || '').trim().toLowerCase();
+  const univ_key = (params.get('univ') || '').trim().toLowerCase();
+  const todayStr = getTodayDate();
+  const jamSekarang = getCurrentTimeWita();
+
+  if (!nama_key || !univ_key) {
+    return NextResponse.json({ error: 'Nama dan universitas wajib diisi' }, { status: 400 });
+  }
+
+  const absensiRows = await fetchAll<any>((from, to) =>
+    supabase
+      .from('absensi')
+      .select('tanggal, jam_masuk, jam_keluar, keterangan, tgl_mulai, tgl_selesai')
+      .eq('nama_key', nama_key)
+      .eq('univ_key', univ_key)
+      .order('tanggal', { ascending: true })
+      .range(from, to)
+  );
+
+  const izinRows = await fetchAll<any>((from, to) =>
+    supabase
+      .from('izin')
+      .select('tanggal, jenis, keterangan, link_surat, tgl_mulai, tgl_selesai')
+      .eq('nama_key', nama_key)
+      .eq('univ_key', univ_key)
+      .order('tanggal', { ascending: true })
+      .range(from, to)
+  );
+
+  let tgl_mulai: string | null = null;
+  let tgl_selesai: string | null = null;
+  let earliestDate = todayStr;
+  let firstRealDate: string | null = null;
+  let autoCount = 0;
+
+  const absenMap = new Map<string, any>();
+  for (const r of absensiRows) {
+    absenMap.set(r.tanggal, r);
+    const ket = String(r.keterangan || '');
+    if (ket.includes('[AUTO]')) {
+      autoCount++;
+    } else if (!firstRealDate || r.tanggal < firstRealDate) {
+      firstRealDate = r.tanggal;
+    }
+    if (r.tgl_mulai && !tgl_mulai) tgl_mulai = r.tgl_mulai;
+    if (r.tgl_selesai && !tgl_selesai) tgl_selesai = r.tgl_selesai;
+    if (r.tanggal < earliestDate) earliestDate = r.tanggal;
+  }
+
+  const izinMap = new Map<string, any>();
+  for (const iz of izinRows) {
+    izinMap.set(iz.tanggal, iz);
+    if (!firstRealDate || iz.tanggal < firstRealDate) {
+      firstRealDate = iz.tanggal;
+    }
+    if (iz.tgl_mulai && !tgl_mulai) tgl_mulai = iz.tgl_mulai;
+    if (iz.tgl_selesai && !tgl_selesai) tgl_selesai = iz.tgl_selesai;
+    if (iz.tanggal < earliestDate) earliestDate = iz.tanggal;
+  }
+
+  const startStr = tgl_mulai || earliestDate;
+  const endStr = tgl_selesai && tgl_selesai < todayStr ? tgl_selesai : todayStr;
+  const allDates = startStr <= endStr ? generateDateRange(startStr, endStr) : [todayStr];
+
+  const cutoffPast = firstRealDate || todayStr;
+  let missingPastWorkdays = 0;
+  if (tgl_mulai && tgl_mulai < cutoffPast) {
+    for (const d of allDates) {
+      if (d < cutoffPast && !isWeekendOrFriday(d) && !absenMap.has(d) && !izinMap.has(d)) {
+        missingPastWorkdays++;
+      }
+    }
+  }
+
+  const cleanKet = (val?: string | null) =>
+    val ? val.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').replace(/\[AUTO\]/g, '').trim() : '';
+
+  const calendar = [...allDates].reverse().map((d) => {
+    const hari = getDayName(d);
+    const abs = absenMap.get(d);
+    const iz = izinMap.get(d);
+    const libur = isWeekendOrFriday(d);
+
+    if (abs) {
+      const rawKet = String(abs.keterangan || '');
+      const isAuto = rawKet.includes('[AUTO]');
+      const hasTap =
+        !rawKet.includes('[RESET]') &&
+        !isAuto &&
+        !iz &&
+        (rawKet.includes('[TAP]') ||
+          (d < todayStr && !abs.jam_keluar) ||
+          (d === todayStr && !abs.jam_keluar && jamSekarang >= BATAS_JAM_PULANG));
+
+      return {
+        tanggal: d,
+        hari,
+        status: 'HADIR',
+        is_auto: isAuto,
+        jam_masuk: abs.jam_masuk ? String(abs.jam_masuk).slice(0, 5) : '-',
+        jam_keluar: abs.jam_keluar ? String(abs.jam_keluar).slice(0, 5) : '-',
+        tidak_absen_pulang: hasTap,
+        keterangan: cleanKet(abs.keterangan) || (isAuto ? 'Hadir (Pra-Sistem)' : iz ? `Izin: ${iz.jenis}` : '-'),
+      };
+    }
+
+    if (iz) {
+      return {
+        tanggal: d,
+        hari,
+        status: 'IZIN',
+        jenis_izin: iz.jenis || 'Izin',
+        jam_masuk: '-',
+        jam_keluar: '-',
+        tidak_absen_pulang: false,
+        keterangan: iz.keterangan || iz.jenis || '-',
+        link_surat: iz.link_surat || null,
+      };
+    }
+
+    if (libur) {
+      return {
+        tanggal: d,
+        hari,
+        status: 'LIBUR',
+        jam_masuk: '-',
+        jam_keluar: '-',
+        tidak_absen_pulang: false,
+        keterangan: 'Libur (Jumat / Akhir Pekan)',
+      };
+    }
+
+    if (d === todayStr && jamSekarang < BATAS_JAM_PULANG) {
+      return {
+        tanggal: d,
+        hari,
+        status: 'BELUM_ABSEN',
+        jam_masuk: '-',
+        jam_keluar: '-',
+        tidak_absen_pulang: false,
+        keterangan: 'Belum Melakukan Presensi Hari Ini',
+      };
+    }
+
+    return {
+      tanggal: d,
+      hari,
+      status: 'TIDAK_HADIR',
+      jam_masuk: '-',
+      jam_keluar: '-',
+      tidak_absen_pulang: false,
+      keterangan: 'Tidak Hadir (Tanpa Keterangan)',
+    };
+  });
+
+  return NextResponse.json({
+    tgl_mulai: startStr,
+    tgl_selesai: tgl_selesai || null,
+    batas_hitung: endStr,
+    first_real_date: cutoffPast,
+    missing_past_workdays: missingPastWorkdays,
+    auto_count: autoCount,
+    calendar,
+  });
 }
 
 async function handleRiwayat(params: URLSearchParams) {
@@ -248,7 +474,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // Aksi Buka Blokir SP-3: jam_keluar tetap kosong (-), hanya membersihkan/memutihkan status SP
+    // 1. Aksi Buka Blokir SP-3
     if (body.action === 'unblock_sp') {
       const nama_key = (body.nama || '').trim().toLowerCase();
       const univ_key = (body.universitas || '').trim().toLowerCase();
@@ -269,6 +495,7 @@ export async function POST(req: NextRequest) {
 
       for (const r of rows) {
         const ket = String(r.keterangan || '');
+        if (ket.includes('[AUTO]')) continue;
         const hasTap = ket.includes('[TAP]');
         const isNullExit = !r.jam_keluar;
         if (hasTap || isNullExit) {
@@ -289,6 +516,155 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // 2. Aksi Isi Otomatis Masa Lalu (Backfill Senin-Kamis dengan jam 07:15 - 16:05)
+    if (body.action === 'backfill_past') {
+      const nama = (body.nama || '').trim();
+      const universitas = (body.universitas || '').trim();
+      const nama_key = nama.toLowerCase();
+      const univ_key = universitas.toLowerCase();
+      const todayStr = getTodayDate();
+
+      if (!nama_key || !univ_key) {
+        return NextResponse.json({ ok: false, error: 'Nama dan universitas wajib diisi.' }, { status: 400 });
+      }
+
+      const absensiRows = await fetchAll<any>((from, to) =>
+        supabase
+          .from('absensi')
+          .select('tanggal, keterangan, tgl_mulai, tgl_selesai')
+          .eq('nama_key', nama_key)
+          .eq('univ_key', univ_key)
+          .order('tanggal', { ascending: true })
+          .range(from, to)
+      );
+
+      const izinRows = await fetchAll<any>((from, to) =>
+        supabase
+          .from('izin')
+          .select('tanggal, tgl_mulai, tgl_selesai')
+          .eq('nama_key', nama_key)
+          .eq('univ_key', univ_key)
+          .order('tanggal', { ascending: true })
+          .range(from, to)
+      );
+
+      let tgl_mulai: string | null = null;
+      let tgl_selesai: string | null = null;
+      let firstRealDate: string | null = null;
+      const existingDates = new Set<string>();
+
+      for (const r of absensiRows) {
+        existingDates.add(r.tanggal);
+        const ket = String(r.keterangan || '');
+        if (!ket.includes('[AUTO]') && (!firstRealDate || r.tanggal < firstRealDate)) {
+          firstRealDate = r.tanggal;
+        }
+        if (r.tgl_mulai && !tgl_mulai) tgl_mulai = r.tgl_mulai;
+        if (r.tgl_selesai && !tgl_selesai) tgl_selesai = r.tgl_selesai;
+      }
+
+      for (const iz of izinRows) {
+        existingDates.add(iz.tanggal);
+        if (!firstRealDate || iz.tanggal < firstRealDate) {
+          firstRealDate = iz.tanggal;
+        }
+        if (iz.tgl_mulai && !tgl_mulai) tgl_mulai = iz.tgl_mulai;
+        if (iz.tgl_selesai && !tgl_selesai) tgl_selesai = iz.tgl_selesai;
+      }
+
+      if (!tgl_mulai) {
+        return NextResponse.json({ ok: false, error: 'Tanggal mulai magang belum diatur untuk peserta ini.' }, { status: 400 });
+      }
+
+      const cutoffDate = firstRealDate || todayStr;
+      if (tgl_mulai >= cutoffDate) {
+        return NextResponse.json({ ok: false, error: 'Tidak ada tanggal masa lalu sebelum penggunaan web yang perlu diisi.' }, { status: 400 });
+      }
+
+      const allDates = generateDateRange(tgl_mulai, cutoffDate);
+      const rowsToInsert: any[] = [];
+
+      for (const d of allDates) {
+        if (d >= cutoffDate) continue;
+        if (isWeekendOrFriday(d)) continue;
+        if (existingDates.has(d)) continue;
+
+        const minMasuk = 15 + Math.floor(Math.random() * 14);
+        const minKeluar = 5 + Math.floor(Math.random() * 11);
+        const jam_masuk = `07:${String(minMasuk).padStart(2, '0')}`;
+        const jam_keluar = `16:${String(minKeluar).padStart(2, '0')}`;
+
+        rowsToInsert.push({
+          nama,
+          universitas,
+          tanggal: d,
+          jam_masuk,
+          jam_keluar,
+          lat: null,
+          lng: null,
+          akurasi_gps: null,
+          keterangan: '[AUTO]',
+          tgl_mulai,
+          tgl_selesai,
+          synced_to_sheets: true,
+        });
+      }
+
+      if (rowsToInsert.length === 0) {
+        return NextResponse.json({ ok: false, error: 'Seluruh hari kerja masa lalu sudah terisi.' }, { status: 400 });
+      }
+
+      const { error: insertErr } = await supabase.from('absensi').insert(rowsToInsert);
+      if (insertErr) {
+        return NextResponse.json({ ok: false, error: insertErr.message }, { status: 500 });
+      }
+
+      await supabase.from('admin_log').insert({
+        aksi: 'backfill_auto',
+        tabel: 'absensi',
+        sebelum: null,
+        sesudah: { nama, universitas, jumlah_hari: rowsToInsert.length, rentang: `${tgl_mulai} s/d sebelum ${cutoffDate}` },
+        sheets_ok: true,
+      });
+
+      return NextResponse.json({ ok: true, inserted: rowsToInsert.length });
+    }
+
+    // 3. Aksi Batalkan Isi Otomatis (Undo khusus baris [AUTO])
+    if (body.action === 'undo_backfill') {
+      const nama = (body.nama || '').trim();
+      const universitas = (body.universitas || '').trim();
+      const nama_key = nama.toLowerCase();
+      const univ_key = universitas.toLowerCase();
+
+      if (!nama_key || !univ_key) {
+        return NextResponse.json({ ok: false, error: 'Nama dan universitas wajib diisi.' }, { status: 400 });
+      }
+
+      const { data: deletedRows, error: delErr } = await supabase
+        .from('absensi')
+        .delete()
+        .eq('nama_key', nama_key)
+        .eq('univ_key', univ_key)
+        .ilike('keterangan', '%[AUTO]%')
+        .select('tanggal');
+
+      if (delErr) {
+        return NextResponse.json({ ok: false, error: delErr.message }, { status: 500 });
+      }
+
+      await supabase.from('admin_log').insert({
+        aksi: 'undo_backfill',
+        tabel: 'absensi',
+        sebelum: { nama, universitas, dihapus: deletedRows?.length || 0 },
+        sesudah: null,
+        sheets_ok: true,
+      });
+
+      return NextResponse.json({ ok: true, deleted: deletedRows?.length || 0 });
+    }
+
+    // 4. Simpan Periode Mulai & Selesai Magang
     const { nama, universitas, tgl_mulai, tgl_selesai } = body;
 
     if (!nama || !universitas || !tgl_mulai || !tgl_selesai || tgl_selesai < tgl_mulai) {
@@ -316,6 +692,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'Gagal menyimpan periode.' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e?.message || 'Gagal memproses permintaan.' }, { status: 500 });
   }
 }

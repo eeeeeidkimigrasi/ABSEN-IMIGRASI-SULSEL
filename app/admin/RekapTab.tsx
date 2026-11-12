@@ -16,14 +16,29 @@ export function RekapTab() {
   const [unblockingKey, setUnblockingKey] = useState<string | null>(null);
 
   const [profileItem, setProfileItem] = useState<any | null>(null);
+  const [calendarData, setCalendarData] = useState<any[]>([]);
+  const [indivMeta, setIndivMeta] = useState<{ missing_past_workdays: number; auto_count: number; first_real_date: string }>({
+    missing_past_workdays: 0,
+    auto_count: 0,
+    first_real_date: '',
+  });
+  const [loadingCalendar, setLoadingCalendar] = useState(false);
+  const [processingAuto, setProcessingAuto] = useState(false);
+  const [hideLibur, setHideLibur] = useState(false);
 
   const loadRekap = () => {
     setLoading(true);
     fetch(`/api/admin/data?tipe=rekap&q=${encodeURIComponent(search)}&active=${activeOnly}`)
       .then((res) => res.json())
       .then((d) => {
-        setData(d);
+        const arr = Array.isArray(d) ? d : [];
+        setData(arr);
         setLoading(false);
+        setProfileItem((prev: any) => {
+          if (!prev) return null;
+          const updated = arr.find((x: any) => x.nama === prev.nama && x.universitas === prev.universitas);
+          return updated || prev;
+        });
       });
   };
 
@@ -31,8 +46,97 @@ export function RekapTab() {
     loadRekap();
   }, [search, activeOnly]);
 
+  const fetchIndividuDetail = (nama: string, universitas: string) => {
+    setLoadingCalendar(true);
+    fetch(`/api/admin/data?tipe=individu&nama=${encodeURIComponent(nama)}&univ=${encodeURIComponent(universitas)}`)
+      .then((res) => res.json())
+      .then((d) => {
+        setCalendarData(d.calendar || []);
+        setIndivMeta({
+          missing_past_workdays: d.missing_past_workdays || 0,
+          auto_count: d.auto_count || 0,
+          first_real_date: d.first_real_date || '',
+        });
+        setLoadingCalendar(false);
+      })
+      .catch(() => {
+        setLoadingCalendar(false);
+      });
+  };
+
+  const openProfileModal = (r: any) => {
+    setProfileItem(r);
+    setCalendarData([]);
+    setIndivMeta({ missing_past_workdays: 0, auto_count: 0, first_real_date: '' });
+    fetchIndividuDetail(r.nama, r.universitas);
+  };
+
+  const handleBackfillPast = async () => {
+    if (!profileItem) return;
+    const ok = window.confirm(
+      `Isi otomatis ${indivMeta.missing_past_workdays} hari kerja masa lalu (Senin-Kamis sebelum ${indivMeta.first_real_date}) untuk ${profileItem.nama} dengan jam hadir 07:15 - 16:05?`
+    );
+    if (!ok) return;
+
+    setProcessingAuto(true);
+    try {
+      const res = await fetch('/api/admin/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'backfill_past',
+          nama: profileItem.nama,
+          universitas: profileItem.universitas,
+        }),
+      });
+      const result = await res.json();
+      if (res.ok && result.ok) {
+        fetchIndividuDetail(profileItem.nama, profileItem.universitas);
+        loadRekap();
+      } else {
+        alert(result.error || 'Gagal mengisi kehadiran masa lalu.');
+      }
+    } catch {
+      alert('Gagal menghubungi server.');
+    } finally {
+      setProcessingAuto(false);
+    }
+  };
+
+  const handleUndoBackfill = async () => {
+    if (!profileItem) return;
+    const ok = window.confirm(
+      `Batalkan dan hapus seluruh ${indivMeta.auto_count} baris kehadiran otomatis (Pra-Sistem) untuk ${profileItem.nama}?\n\n(Data absensi asli peserta tidak akan terhapus)`
+    );
+    if (!ok) return;
+
+    setProcessingAuto(true);
+    try {
+      const res = await fetch('/api/admin/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'undo_backfill',
+          nama: profileItem.nama,
+          universitas: profileItem.universitas,
+        }),
+      });
+      const result = await res.json();
+      if (res.ok && result.ok) {
+        fetchIndividuDetail(profileItem.nama, profileItem.universitas);
+        loadRekap();
+      } else {
+        alert(result.error || 'Gagal membatalkan isi otomatis.');
+      }
+    } catch {
+      alert('Gagal menghubungi server.');
+    } finally {
+      setProcessingAuto(false);
+    }
+  };
+
   const handleUnblockSp = async (r: any) => {
-    const ok = window.confirm(`Buka blokir SP-3 dan reset catatan "Tidak absen pulang" untuk ${r.nama}?`);
+    const ok = window.confirm(`Buka blokir SP-3 dan reset catatan pelanggaran untuk ${r.nama}?`);
     if (!ok) return;
     const key = `${r.nama}|${r.universitas}`;
     setUnblockingKey(key);
@@ -251,14 +355,15 @@ export function RekapTab() {
 
     const stats = [
       { label: 'TOTAL HADIR', val: `${item.count} Hari`, color: '#043666', bg: '#F8FAFC', border: '#CBD5E1' },
-      { label: 'TOTAL IZIN / SAKIT', val: `${item.izinCount || 0} Hari`, color: '#92400E', bg: '#FFFBEB', border: '#FDE68A' },
+      { label: 'IZIN / SAKIT', val: `${item.izinCount || 0} Hari`, color: '#92400E', bg: '#FFFBEB', border: '#FDE68A' },
+      { label: 'TIDAK HADIR', val: `${item.alphaCount || 0} Hari`, color: '#991B1B', bg: '#FEF2F2', border: '#FECACA' },
       { label: 'TERAKHIR HADIR', val: item.terakhir || '-', color: '#04315C', bg: '#F8FAFC', border: '#CBD5E1' },
     ];
 
     stats.forEach((st, idx) => {
-      const x = 42 + idx * 265;
+      const x = 42 + idx * 197;
       const y = 306;
-      const w = 246;
+      const w = 185;
       const h = 115;
 
       drawRoundedRect(ctx, x, y, w, h, 10);
@@ -269,12 +374,12 @@ export function RekapTab() {
       ctx.stroke();
 
       ctx.fillStyle = '#475569';
-      ctx.font = 'bold 12px sans-serif';
-      ctx.fillText(st.label, x + 22, y + 38);
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText(st.label, x + 16, y + 38);
 
       ctx.fillStyle = st.color;
-      ctx.font = 'bold 26px sans-serif';
-      ctx.fillText(String(st.val), x + 22, y + 82);
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText(String(st.val), x + 16, y + 80);
     });
 
     const prog = calcProgress(item.tgl_mulai, item.tgl_selesai);
@@ -314,7 +419,7 @@ export function RekapTab() {
 
     ctx.fillStyle = '#64748B';
     ctx.font = '12px sans-serif';
-    ctx.fillText(`Dicetak melalui Sistem Presensi Magang Ditjen Imigrasi Kanwil Sulsel | ${new Date().toISOString().slice(0, 10)}`, 42, 562);
+    ctx.fillText(`Dicetak melalui Sistem Presensi Magang Ditjen Imigrasi Kanwil Sulsel | ${new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)}`, 42, 562);
 
     const link = document.createElement('a');
     link.download = `KartuProfil_${item.nama.replace(/\s+/g, '_')}.png`;
@@ -324,7 +429,6 @@ export function RekapTab() {
 
   return (
     <div className="space-y-6">
-      {/* Bilah Kontrol & Filter */}
       <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-wrap gap-4 items-center justify-between">
         <div className="flex flex-wrap gap-4 items-center">
           <input
@@ -352,7 +456,6 @@ export function RekapTab() {
         </a>
       </div>
 
-      {/* Tabel Rekapitulasi */}
       <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
         <div className="bg-[#043666] px-5 py-3.5 border-b-2 border-[#E9C170] flex items-center justify-between">
           <h2 className="text-xs font-extrabold uppercase tracking-wider text-white">
@@ -457,7 +560,7 @@ export function RekapTab() {
                       <td className="px-5 py-3.5 text-center">
                         <button
                           type="button"
-                          onClick={() => setProfileItem(r)}
+                          onClick={() => openProfileModal(r)}
                           className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-[#043666] hover:bg-[#04315C] text-[#E9C170] rounded shadow-sm transition-colors"
                         >
                           Lihat Kartu
@@ -479,7 +582,6 @@ export function RekapTab() {
         </div>
       </div>
 
-      {/* Modal Edit Periode */}
       {editItem && (
         <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden">
@@ -546,21 +648,25 @@ export function RekapTab() {
         </div>
       )}
 
-      {/* Modal Kartu Profil Individu */}
+      {/* Modal Kartu Profil Individu + Tabel Kalender Kehadiran Harian */}
       {profileItem &&
         (() => {
           const prog = calcProgress(profileItem.tgl_mulai, profileItem.tgl_selesai);
+          const filteredCalendar = hideLibur
+            ? calendarData.filter((c) => c.status !== 'LIBUR')
+            : calendarData;
+
           return (
-            <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center z-50 p-4">
-              <div className="bg-[#F4F6F8] rounded-xl shadow-2xl max-w-xl w-full overflow-hidden border border-slate-300">
-                <div className="bg-[#043666] p-6 text-white border-b-4 border-[#E9C170]">
+            <div className="fixed inset-0 bg-slate-950/75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+              <div className="bg-[#F4F6F8] rounded-xl shadow-2xl max-w-3xl w-full overflow-hidden border border-slate-300 my-auto max-h-[92vh] flex flex-col">
+                <div className="bg-[#043666] p-5 sm:p-6 text-white border-b-4 border-[#E9C170] shrink-0">
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
                       <span className="inline-block px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-[#04315C] text-[#E9C170] border border-[#BD944D]/50 rounded mb-1.5">
-                        Kartu Profil Peserta Magang
+                        Kartu Profil & Rincian Kalender Magang
                       </span>
-                      <h3 className="text-2xl font-extrabold truncate text-white">{profileItem.nama}</h3>
-                      <p className="text-slate-200 text-sm truncate mt-0.5">{profileItem.universitas}</p>
+                      <h3 className="text-xl sm:text-2xl font-extrabold truncate text-white">{profileItem.nama}</h3>
+                      <p className="text-slate-200 text-xs sm:text-sm truncate mt-0.5">{profileItem.universitas}</p>
                     </div>
 
                     <div className="flex items-center gap-3 shrink-0 text-right">
@@ -573,14 +679,14 @@ export function RekapTab() {
                       <img
                         src="/logo-imigrasi.png"
                         alt="Logo Imigrasi"
-                        className="w-14 h-14 object-contain"
+                        className="w-12 h-12 sm:w-14 sm:h-14 object-contain"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="p-6 space-y-4">
-                  <div className="flex items-center justify-between">
+                <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <h4 className="text-xs font-extrabold uppercase tracking-wider text-[#043666]">
                       Statistik Kehadiran & Masa Magang
                     </h4>
@@ -600,46 +706,52 @@ export function RekapTab() {
                   <div className="grid grid-cols-2 gap-3.5">
                     <div className="p-3.5 rounded-lg bg-white border border-slate-200 border-l-4 border-l-[#043666]">
                       <div className="text-[11px] font-bold text-slate-500 uppercase">Mulai Magang</div>
-                      <div className="text-base font-extrabold text-slate-900 mt-1">
+                      <div className="text-sm sm:text-base font-extrabold text-slate-900 mt-1">
                         {profileItem.tgl_mulai || 'Belum diatur'}
                       </div>
                     </div>
                     <div className="p-3.5 rounded-lg bg-white border border-slate-200 border-l-4 border-l-[#BD944D]">
                       <div className="text-[11px] font-bold text-slate-500 uppercase">Berakhir Magang</div>
-                      <div className="text-base font-extrabold text-slate-900 mt-1">
+                      <div className="text-sm sm:text-base font-extrabold text-slate-900 mt-1">
                         {profileItem.tgl_selesai || 'Belum diatur'}
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="p-3.5 rounded-lg bg-white border border-slate-200 text-center">
-                      <div className="text-[11px] font-bold text-slate-500 uppercase">Total Hadir</div>
-                      <div className="text-xl font-black text-[#043666] mt-1">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 rounded-lg bg-white border border-slate-200 text-center">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase">Total Hadir</div>
+                      <div className="text-lg font-black text-[#043666] mt-1">
                         {profileItem.count} <span className="text-xs font-semibold">Hari</span>
                       </div>
                     </div>
-                    <div className="p-3.5 rounded-lg bg-white border border-slate-200 text-center">
-                      <div className="text-[11px] font-bold text-slate-500 uppercase">Total Izin</div>
-                      <div className="text-xl font-black text-amber-700 mt-1">
+                    <div className="p-3 rounded-lg bg-white border border-slate-200 text-center">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase">Izin / Sakit</div>
+                      <div className="text-lg font-black text-amber-700 mt-1">
                         {profileItem.izinCount || 0} <span className="text-xs font-semibold">Hari</span>
                       </div>
                     </div>
-                    <div className="p-3.5 rounded-lg bg-white border border-slate-200 text-center">
-                      <div className="text-[11px] font-bold text-slate-500 uppercase">Terakhir Hadir</div>
-                      <div className="text-sm font-extrabold text-slate-900 mt-2">
+                    <div className="p-3 rounded-lg bg-red-50/60 border border-red-200 text-center">
+                      <div className="text-[10px] font-bold text-red-700 uppercase">Tidak Hadir</div>
+                      <div className="text-lg font-black text-red-700 mt-1">
+                        {profileItem.alphaCount || 0} <span className="text-xs font-semibold">Hari</span>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-lg bg-white border border-slate-200 text-center">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase">Terakhir Hadir</div>
+                      <div className="text-xs sm:text-sm font-extrabold text-slate-900 mt-2">
                         {profileItem.terakhir || '-'}
                       </div>
                     </div>
                   </div>
 
                   {prog && (
-                    <div className="bg-white px-4 py-3.5 rounded-lg border border-slate-200">
-                      <div className="flex justify-between text-xs text-slate-700 mb-2 font-bold">
-                        <span>Progres Durasi ({prog.totalDays} hari total)</span>
+                    <div className="bg-white px-4 py-3 rounded-lg border border-slate-200">
+                      <div className="flex justify-between text-xs text-slate-700 mb-1.5 font-bold">
+                        <span>Progres Durasi ({prog.totalDays} hari kalender)</span>
                         <span className="text-[#043666]">Sisa {prog.remaining} hari</span>
                       </div>
-                      <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-[#043666] rounded-full"
                           style={{ width: `${prog.pct}%` }}
@@ -647,9 +759,158 @@ export function RekapTab() {
                       </div>
                     </div>
                   )}
+
+                  {/* Panel Tombol Isi Otomatis Masa Lalu & Batalkan Isi Otomatis */}
+                  {(indivMeta.missing_past_workdays > 0 || indivMeta.auto_count > 0) && (
+                    <div className="bg-amber-50/90 border border-amber-300 rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-xs text-amber-950 max-w-md">
+                        <span className="font-extrabold uppercase tracking-wider block text-[#043666]">
+                          Sinkronisasi Kehadiran Pra-Sistem (07:15 – 16:05)
+                        </span>
+                        {indivMeta.missing_past_workdays > 0 ? (
+                          <span>
+                            Terdapat <strong>{indivMeta.missing_past_workdays} hari kerja</strong> (Senin–Kamis) sebelum{' '}
+                            <strong>{indivMeta.first_real_date}</strong> yang belum terisi di database.
+                          </span>
+                        ) : (
+                          <span>
+                            Tercatat <strong>{indivMeta.auto_count} hari kerja</strong> masa lalu yang telah diisi otomatis (Pra-Sistem).
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {indivMeta.missing_past_workdays > 0 && (
+                          <button
+                            type="button"
+                            disabled={processingAuto}
+                            onClick={handleBackfillPast}
+                            className="px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wider bg-[#043666] hover:bg-[#04315C] text-[#E9C170] rounded shadow-sm transition-colors disabled:opacity-50"
+                          >
+                            {processingAuto ? 'Memproses...' : `+ Isi Otomatis Masa Lalu (${indivMeta.missing_past_workdays} Hari)`}
+                          </button>
+                        )}
+                        {indivMeta.auto_count > 0 && (
+                          <button
+                            type="button"
+                            disabled={processingAuto}
+                            onClick={handleUndoBackfill}
+                            className="px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wider bg-red-700 hover:bg-red-800 text-white rounded shadow-sm transition-colors disabled:opacity-50"
+                          >
+                            {processingAuto ? 'Memproses...' : `Batalkan Isi Otomatis (${indivMeta.auto_count} Hari)`}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tabel Rincian Kalender Harian */}
+                  <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                    <div className="bg-slate-100 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <span className="text-xs font-extrabold uppercase tracking-wider text-[#043666]">
+                          Daftar Kehadiran Harian (Senin–Kamis Kerja, Jumat–Minggu Libur)
+                        </span>
+                      </div>
+                      <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={hideLibur}
+                          onChange={(e) => setHideLibur(e.target.checked)}
+                          className="w-3.5 h-3.5 accent-[#043666] rounded"
+                        />
+                        Sembunyikan Hari Libur
+                      </label>
+                    </div>
+
+                    <div className="max-h-64 overflow-y-auto">
+                      <table className="w-full text-xs text-left">
+                        <thead className="bg-slate-50 text-slate-600 uppercase text-[10px] font-extrabold tracking-wider border-b border-slate-200 sticky top-0">
+                          <tr>
+                            <th className="px-3.5 py-2.5">Tanggal</th>
+                            <th className="px-3.5 py-2.5">Hari</th>
+                            <th className="px-3.5 py-2.5">Status</th>
+                            <th className="px-3.5 py-2.5">Jam Masuk</th>
+                            <th className="px-3.5 py-2.5">Jam Keluar</th>
+                            <th className="px-3.5 py-2.5">Keterangan</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 text-slate-800">
+                          {loadingCalendar ? (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-8 text-center font-bold text-[#043666] uppercase tracking-wider">
+                                Menyusun Kalender Kehadiran...
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredCalendar.map((c, idx) => (
+                              <tr
+                                key={idx}
+                                className={
+                                  c.status === 'LIBUR'
+                                    ? 'bg-slate-50/70 text-slate-400'
+                                    : c.status === 'TIDAK_HADIR'
+                                    ? 'bg-red-50/30 hover:bg-red-50/60'
+                                    : 'hover:bg-slate-50'
+                                }
+                              >
+                                <td className="px-3.5 py-2 font-semibold whitespace-nowrap">{c.tanggal}</td>
+                                <td className="px-3.5 py-2 whitespace-nowrap">{c.hari}</td>
+                                <td className="px-3.5 py-2 whitespace-nowrap">
+                                  {c.status === 'HADIR' && (
+                                    <span className="inline-block px-2 py-0.5 text-[10px] font-extrabold uppercase rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                      Hadir
+                                    </span>
+                                  )}
+                                  {c.status === 'IZIN' && (
+                                    <span className="inline-block px-2 py-0.5 text-[10px] font-extrabold uppercase rounded bg-amber-100 text-amber-900 border border-amber-300">
+                                      {c.jenis_izin || 'Izin'}
+                                    </span>
+                                  )}
+                                  {c.status === 'BELUM_ABSEN' && (
+                                    <span className="inline-block px-2 py-0.5 text-[10px] font-extrabold uppercase rounded bg-amber-50 text-amber-800 border border-amber-300">
+                                      Belum Absen
+                                    </span>
+                                  )}
+                                  {c.status === 'TIDAK_HADIR' && (
+                                    <span className="inline-block px-2 py-0.5 text-[10px] font-extrabold uppercase rounded bg-red-100 text-red-800 border border-red-300">
+                                      Tidak Hadir
+                                    </span>
+                                  )}
+                                  {c.status === 'LIBUR' && (
+                                    <span className="inline-block px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-slate-200 text-slate-600">
+                                      Libur
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3.5 py-2 font-semibold">{c.jam_masuk}</td>
+                                <td className="px-3.5 py-2">
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    <span className="font-semibold">{c.jam_keluar}</span>
+                                    {c.tidak_absen_pulang && (
+                                      <span className="inline-block px-1.5 py-0.5 text-[9px] font-extrabold uppercase rounded bg-red-100 text-red-800 border border-red-300">
+                                        Tidak Absen Pulang
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-3.5 py-2">{c.keterangan}</td>
+                              </tr>
+                            ))
+                          )}
+                          {!loadingCalendar && filteredCalendar.length === 0 && (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                                Tidak ada data tanggal untuk ditampilkan.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="px-6 py-4 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                <div className="px-5 sm:px-6 py-3.5 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => setProfileItem(null)}
@@ -662,7 +923,7 @@ export function RekapTab() {
                       href={`/api/admin/export?tipe=individu&nama=${encodeURIComponent(profileItem.nama)}&univ=${encodeURIComponent(profileItem.universitas)}`}
                       className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider bg-slate-100 text-slate-800 border border-slate-300 rounded-md hover:bg-slate-200"
                     >
-                      Unduh CSV
+                      Unduh CSV Lengkap
                     </a>
                     <button
                       type="button"

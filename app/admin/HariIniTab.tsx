@@ -29,7 +29,7 @@ export function HariIniTab() {
   const belumPulang = data.hadir.filter((h) => !h.jam_keluar);
 
   const cleanKet = (ket?: string | null) =>
-    ket ? ket.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').trim() || '-' : '-';
+    ket ? ket.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').replace(/\[AUTO\]/g, '').trim() || '-' : '-';
 
   return (
     <div className="space-y-8">

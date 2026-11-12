@@ -1,12 +1,52 @@
 import { NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { fetchAll } from '@/lib/fetch-all';
+import { getTodayDate, getDayName } from '@/lib/waktu';
 
 const ACTIVE_DAYS = 14;
+const BATAS_JAM_PULANG = '18:00';
+
+function getCurrentTimeWita(): string {
+  const wita = new Date(Date.now() + 8 * 3600 * 1000);
+  return wita.toISOString().slice(11, 16);
+}
+
+function getThresholdDateWita(daysAgo: number): string {
+  const wita = new Date(Date.now() + 8 * 3600 * 1000);
+  wita.setUTCDate(wita.getUTCDate() - daysAgo);
+  return wita.toISOString().slice(0, 10);
+}
+
+function isWeekendOrFriday(dateStr: string): boolean {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return day === 0 || day === 5 || day === 6;
+}
+
+function generateDateRange(startStr: string, endStr: string): string[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startStr) || !/^\d{4}-\d{2}-\d{2}$/.test(endStr)) {
+    return [];
+  }
+  const dates: string[] = [];
+  const [sy, sm, sd] = startStr.split('-').map(Number);
+  const [ey, em, ed] = endStr.split('-').map(Number);
+  const cur = new Date(Date.UTC(sy, sm - 1, sd));
+  const end = new Date(Date.UTC(ey, em - 1, ed));
+
+  while (cur <= end && dates.length < 730) {
+    dates.push(cur.toISOString().slice(0, 10));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return dates;
+}
 
 function escapeCSV(val: any): string {
   if (val === null || val === undefined) return '';
-  let str = String(val).replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').trim();
+  let str = String(val)
+    .replace(/\[TAP\]/g, '')
+    .replace(/\[RESET\]/g, '')
+    .replace(/\[AUTO\]/g, '')
+    .trim();
 
   if (/^[=+-@\t\r]/.test(str)) {
     str = "'" + str;
@@ -23,9 +63,11 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = req.nextUrl;
     const tipe = searchParams.get('tipe');
+    const todayStr = getTodayDate();
+    const jamSekarang = getCurrentTimeWita();
 
     let csvContent = '';
-    let filename = `export-${tipe}-${new Date().toISOString().split('T')[0]}.csv`;
+    let filename = `export-${tipe}-${todayStr}.csv`;
 
     if (tipe === 'rekap') {
       const search = searchParams.get('q')?.slice(0, 80) || '';
@@ -42,9 +84,7 @@ export async function GET(req: NextRequest) {
       });
 
       const rekapMap = new Map<string, { nama: string; universitas: string; count: number; terakhir: string }>();
-      const threshold = new Date();
-      threshold.setDate(threshold.getDate() - ACTIVE_DAYS);
-      const thresholdStr = threshold.toISOString().split('T')[0];
+      const thresholdStr = getThresholdDateWita(ACTIVE_DAYS);
 
       for (const row of data) {
         const key = `${row.nama_key}|${row.univ_key}`;
@@ -62,23 +102,83 @@ export async function GET(req: NextRequest) {
         csvContent += `${escapeCSV(r.nama)},${escapeCSV(r.universitas)},${r.count},${r.terakhir}\n`;
       });
     } else if (tipe === 'individu') {
-      const nama = (searchParams.get('nama') || '').trim().toLowerCase();
-      const univ = (searchParams.get('univ') || '').trim().toLowerCase();
+      const rawNama = (searchParams.get('nama') || '').trim();
+      const rawUniv = (searchParams.get('univ') || '').trim();
+      const nama = rawNama.toLowerCase();
+      const univ = rawUniv.toLowerCase();
 
-      const data = await fetchAll<any>((from, to) =>
+      const absensiRows = await fetchAll<any>((from, to) =>
         supabase
           .from('absensi')
           .select('*')
           .eq('nama_key', nama)
           .eq('univ_key', univ)
-          .order('tanggal', { ascending: false })
+          .order('tanggal', { ascending: true })
           .range(from, to)
       );
 
+      const izinRows = await fetchAll<any>((from, to) =>
+        supabase
+          .from('izin')
+          .select('*')
+          .eq('nama_key', nama)
+          .eq('univ_key', univ)
+          .order('tanggal', { ascending: true })
+          .range(from, to)
+      );
+
+      let tgl_mulai: string | null = null;
+      let tgl_selesai: string | null = null;
+      let earliestDate = todayStr;
+      let displayNama = rawNama;
+      let displayUniv = rawUniv;
+
+      const absenMap = new Map<string, any>();
+      for (const r of absensiRows) {
+        absenMap.set(r.tanggal, r);
+        if (r.nama) displayNama = r.nama;
+        if (r.universitas) displayUniv = r.universitas;
+        if (r.tgl_mulai && !tgl_mulai) tgl_mulai = r.tgl_mulai;
+        if (r.tgl_selesai && !tgl_selesai) tgl_selesai = r.tgl_selesai;
+        if (r.tanggal < earliestDate) earliestDate = r.tanggal;
+      }
+
+      const izinMap = new Map<string, any>();
+      for (const iz of izinRows) {
+        izinMap.set(iz.tanggal, iz);
+        if (iz.nama) displayNama = iz.nama;
+        if (iz.universitas) displayUniv = iz.universitas;
+        if (iz.tgl_mulai && !tgl_mulai) tgl_mulai = iz.tgl_mulai;
+        if (iz.tgl_selesai && !tgl_selesai) tgl_selesai = iz.tgl_selesai;
+        if (iz.tanggal < earliestDate) earliestDate = iz.tanggal;
+      }
+
+      const startStr = tgl_mulai || earliestDate;
+      const endStr = tgl_selesai && tgl_selesai < todayStr ? tgl_selesai : todayStr;
+      const allDates = startStr <= endStr ? generateDateRange(startStr, endStr) : [todayStr];
+
       filename = `rekap-individu-${nama.replace(/\s+/g, '_')}.csv`;
-      csvContent = '\uFEFFTANGGAL,NAMA,UNIVERSITAS,JAM MASUK,JAM KELUAR,KETERANGAN\n';
-      data.forEach((r) => {
-        csvContent += `${r.tanggal},${escapeCSV(r.nama)},${escapeCSV(r.universitas)},${r.jam_masuk || ''},${r.jam_keluar || ''},${escapeCSV(r.keterangan)}\n`;
+      csvContent = '\uFEFFTANGGAL,HARI,NAMA,UNIVERSITAS,STATUS,JAM MASUK,JAM KELUAR,KETERANGAN\n';
+
+      [...allDates].reverse().forEach((d) => {
+        const hari = getDayName(d);
+        const abs = absenMap.get(d);
+        const iz = izinMap.get(d);
+        const libur = isWeekendOrFriday(d);
+
+        if (abs) {
+          const isAuto = String(abs.keterangan || '').includes('[AUTO]');
+          const ketStr = escapeCSV(abs.keterangan) || (isAuto ? 'Hadir (Pra-Sistem)' : '');
+          csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},HADIR,${String(abs.jam_masuk || '-').slice(0, 5)},${String(abs.jam_keluar || '-').slice(0, 5)},${ketStr}\n`;
+        } else if (iz) {
+          csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},IZIN (${escapeCSV(iz.jenis)}),-,-,${escapeCSV(iz.keterangan)}\n`;
+        } else if (libur) {
+          csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},LIBUR,-,-,Libur (Jumat / Akhir Pekan)\n`;
+        } else if (d === todayStr && jamSekarang < BATAS_JAM_PULANG) {
+          csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},BELUM ABSEN,-,-,Belum Melakukan Presensi Hari Ini\n`;
+        } else {
+          csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},TIDAK HADIR,-,-,Tidak Hadir (Tanpa Keterangan)\n`;
+        }
       });
     } else if (tipe === 'riwayat') {
       const start = searchParams.get('start')?.slice(0, 10);
@@ -132,7 +232,7 @@ export async function GET(req: NextRequest) {
           .range(from, to)
       );
 
-      filename = `log-admin-${new Date().toISOString().split('T')[0]}.csv`;
+      filename = `log-admin-${todayStr}.csv`;
       csvContent = '\uFEFFWAKTU,AKSI,TABEL,SHEETS_OK,SEBELUM,SESUDAH\n';
       data.forEach((r) => {
         const sebelum = r.sebelum ? JSON.stringify(r.sebelum) : '';

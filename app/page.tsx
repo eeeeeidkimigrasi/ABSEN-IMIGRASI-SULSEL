@@ -13,6 +13,8 @@ type FormData = {
   link_surat: string;
   tgl_mulai: string;
   tgl_selesai: string;
+  izin_mulai: string;
+  izin_selesai: string;
 };
 
 type Mode = 'hadir' | 'pulang' | 'izin';
@@ -20,6 +22,8 @@ type Mode = 'hadir' | 'pulang' | 'izin';
 export default function AbsenPage() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('hadir');
+  const todayWita = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+
   const [form, setForm] = useState<FormData>({
     nama: '',
     universitas: '',
@@ -30,6 +34,8 @@ export default function AbsenPage() {
     link_surat: '',
     tgl_mulai: '',
     tgl_selesai: '',
+    izin_mulai: todayWita,
+    izin_selesai: todayWita,
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -61,7 +67,14 @@ export default function AbsenPage() {
   }, [mode]);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setForm((f) => {
+      const updated = { ...f, [name]: value };
+      if (name === 'izin_mulai' && updated.izin_selesai < value) {
+        updated.izin_selesai = value;
+      }
+      return updated;
+    });
     setError(null);
     setStatusMsg(null);
   };
@@ -187,10 +200,17 @@ export default function AbsenPage() {
             konfirmasi_baru,
             tgl_mulai: form.tgl_mulai,
             tgl_selesai: form.tgl_selesai,
+            izin_mulai: form.izin_mulai,
+            izin_selesai: form.izin_selesai,
           }),
         });
         const data = await res.json();
 
+        if (data.status === 'sudah_hadir') {
+          setLoading(false);
+          setStatusMsg('Anda sudah tercatat hadir hari ini, pengajuan izin tidak dapat diproses.');
+          return;
+        }
         if (data.status === 'sudah_izin') {
           setLoading(false);
           setStatusMsg('Laporan izin Anda untuk hari ini sudah tercatat di sistem.');
@@ -213,7 +233,7 @@ export default function AbsenPage() {
         } catch {}
 
         setForm((f) => ({ ...f, keterangan: '', link_surat: '' }));
-        router.push(`/sukses?mode=izin&nama=${encodeURIComponent(data.nama)}&univ=${encodeURIComponent(form.universitas)}&tanggal=${data.tanggal}&jenis=${data.jenis}`);
+        router.push(`/sukses?mode=izin&nama=${encodeURIComponent(data.nama)}&univ=${encodeURIComponent(form.universitas)}&tanggal=${encodeURIComponent(data.tanggal)}&jenis=${data.jenis}`);
       } catch {
         setLoading(false);
         setError('Gagal menghubungi server. Periksa koneksi internet Anda dan coba lagi.');
@@ -612,6 +632,41 @@ export default function AbsenPage() {
 
               {mode === 'izin' && (
                 <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Dari Tanggal
+                      </label>
+                      <input
+                        name="izin_mulai"
+                        type="date"
+                        required
+                        value={form.izin_mulai}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-md text-sm font-medium focus:outline-none focus:border-[#043666] focus:ring-1 focus:ring-[#043666]"
+                        disabled={loading}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                        Sampai Tanggal
+                      </label>
+                      <input
+                        name="izin_selesai"
+                        type="date"
+                        required
+                        min={form.izin_mulai}
+                        value={form.izin_selesai}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-md text-sm font-medium focus:outline-none focus:border-[#043666] focus:ring-1 focus:ring-[#043666]"
+                        disabled={loading}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-500 -mt-2">
+                    Jika izin beberapa hari, hari libur (Jumat–Minggu) otomatis dilewati.
+                  </p>
+
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
                       Kategori Ketidakhadiran

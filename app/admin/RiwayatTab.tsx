@@ -72,7 +72,7 @@ export function RiwayatTab() {
   const openEdit = (r: any) => {
     const rawKet = String(r.keterangan || '');
     const hasTap = rawKet.includes('[TAP]');
-    const cleanKet = rawKet.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').trim();
+    const cleanKet = rawKet.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').replace(/\[AUTO\]/g, '').trim();
 
     setMode('edit');
     setOldKeys({ nama: r.nama, universitas: r.universitas, tanggal: r.tanggal });
@@ -295,7 +295,7 @@ export function RiwayatTab() {
                 data.map((r, i) => {
                   const rawKet = String(r.keterangan || '');
                   const hasTap = Boolean(r.tap) || rawKet.includes('[TAP]') || (r.tanggal < todayStr && !r.jam_keluar);
-                  const cleanKet = rawKet.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').trim();
+                  const cleanKet = rawKet.replace(/\[TAP\]/g, '').replace(/\[RESET\]/g, '').replace(/\[AUTO\]/g, '').trim();
 
                   return (
                     <tr key={i} className="hover:bg-slate-50/80 transition-colors">
