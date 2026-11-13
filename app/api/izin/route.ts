@@ -164,18 +164,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 2. Cek apakah peserta baru
-  const { count: absensiAny } = await supabase
-    .from('absensi')
-    .select('*', { count: 'exact', head: true })
-    .eq('nama_key', nama_key)
-    .eq('univ_key', univ_key);
-
-  const { count: izinAny } = await supabase
-    .from('izin')
-    .select('*', { count: 'exact', head: true })
-    .eq('nama_key', nama_key)
-    .eq('univ_key', univ_key);
+  // 2. Cek apakah peserta baru secara paralel
+  const [{ count: absensiAny }, { count: izinAny }] = await Promise.all([
+    supabase
+      .from('absensi')
+      .select('*', { count: 'exact', head: true })
+      .eq('nama_key', nama_key)
+      .eq('univ_key', univ_key),
+    supabase
+      .from('izin')
+      .select('*', { count: 'exact', head: true })
+      .eq('nama_key', nama_key)
+      .eq('univ_key', univ_key),
+  ]);
 
   const isNew = (!absensiAny || absensiAny === 0) && (!izinAny || izinAny === 0);
 

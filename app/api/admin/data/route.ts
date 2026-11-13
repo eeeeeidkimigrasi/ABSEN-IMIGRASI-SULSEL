@@ -151,7 +151,6 @@ async function handleLog() {
 }
 
 async function handleSummary() {
-  cleanupInactiveParticipants().catch(() => {});
   const tanggal = getTodayDate();
   const hari = getDayName(tanggal);
   const customHolidays = await getCustomHolidaysMap();
