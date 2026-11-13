@@ -89,13 +89,13 @@ export function RekapTab() {
     } catch {}
   };
 
-  const [ttdJabatan, setTtdJabatan] = useState('Pembimbing / Pejabat Berwenang,');
+  const [ttdJabatan, setTtdJabatan] = useState('Ketua Tim Kepegawaian dan Kerja Sama');
   const [ttdNama, setTtdNama] = useState('');
-  const [ttdNip, setTtdNip] = useState('Kanwil Ditjen Imigrasi Sulawesi Selatan');
+  const [ttdNip, setTtdNip] = useState('');
 
   useEffect(() => {
     try {
-      const savedTtd = localStorage.getItem('rekap_ttd_pejabat');
+      const savedTtd = localStorage.getItem('rekap_ttd_pejabat_v2');
       if (savedTtd) {
         const parsed = JSON.parse(savedTtd);
         if (parsed.jabatan !== undefined) setTtdJabatan(parsed.jabatan);
@@ -115,7 +115,7 @@ export function RekapTab() {
     if (field === 'nama') setTtdNama(val);
     if (field === 'nip') setTtdNip(val);
     try {
-      localStorage.setItem('rekap_ttd_pejabat', JSON.stringify(next));
+      localStorage.setItem('rekap_ttd_pejabat_v2', JSON.stringify(next));
     } catch {}
   };
 
@@ -304,6 +304,45 @@ export function RekapTab() {
     else {
       setSortCol(col);
       setSortDir('desc');
+    }
+  };
+
+  const handleDeleteParticipant = async (nama: string, universitas: string) => {
+    const confirm1 = window.confirm(
+      `PERINGATAN: Anda akan menghapus SELURUH data kehadiran dan izin untuk peserta:\n\nNama: ${nama}\nUniversitas: ${universitas}\n\nApakah Anda yakin ingin melanjutkan?`
+    );
+    if (!confirm1) return;
+
+    const confirm2 = window.confirm(
+      `Konfirmasi Terakhir: Seluruh riwayat database untuk "${nama}" akan dihapus permanen. Lanjutkan hapus?`
+    );
+    if (!confirm2) return;
+
+    setSaving(true);
+    setProcessingAuto(true);
+    try {
+      const res = await fetch('/api/admin/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete_participant',
+          nama,
+          universitas,
+        }),
+      });
+      const result = await res.json();
+      if (res.ok && result.ok) {
+        setEditItem(null);
+        setProfileItem(null);
+        loadRekap();
+      } else {
+        alert(result.error || 'Gagal menghapus data peserta.');
+      }
+    } catch {
+      alert('Gagal menghubungi server.');
+    } finally {
+      setSaving(false);
+      setProcessingAuto(false);
     }
   };
 
@@ -1022,11 +1061,12 @@ export function RekapTab() {
         <div style="font-weight:800;text-decoration:underline;">${esc(item.nama)}</div>
         <div style="color:#475569;font-size:10px;margin-top:2px;">${esc(item.universitas)}</div>
       </div>
-      <div class="ttd-box">
-        <div>Makassar, <span contenteditable="true" style="outline:none;">${esc(todayStr)}</span><br/><span contenteditable="true" style="outline:none;">${esc(ttdJabatan || 'Pembimbing / Pejabat Berwenang,')}</span></div>
+      <div class="ttd-box" style="text-align:left;width:210px;">
+        <div contenteditable="true" style="outline:none;">Mengetahui</div>
+        <div contenteditable="true" style="outline:none;line-height:1.35;">${esc(ttdJabatan || 'Ketua Tim Kepegawaian dan Kerja Sama')}</div>
         <div class="ttd-space"></div>
-        <div contenteditable="true" style="font-weight:800;text-decoration:underline;outline:none;">${esc(ttdNama.trim() ? ttdNama.trim() : '( ................................................ )')}</div>
-        <div contenteditable="true" style="color:#475569;font-size:10px;margin-top:2px;outline:none;">${esc(ttdNip || 'Kanwil Ditjen Imigrasi Sulawesi Selatan')}</div>
+        <div contenteditable="true" style="font-weight:700;outline:none;">${esc(ttdNama.trim() ? ttdNama.trim() : '( ................................................ )')}</div>
+        ${ttdNip.trim() ? `<div contenteditable="true" style="color:#475569;font-size:10px;margin-top:2px;outline:none;">${esc(ttdNip.trim())}</div>` : ''}
       </div>
     </div>
   </div>
@@ -1409,23 +1449,33 @@ export function RekapTab() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2.5">
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setEditItem(null)}
+                  onClick={() => handleDeleteParticipant(editItem.nama, editItem.universitas)}
                   disabled={saving}
-                  className="px-4 py-2 text-xs font-bold uppercase tracking-wider border border-slate-300 rounded-md text-slate-700 hover:bg-slate-100"
+                  className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-700 hover:text-white transition-colors disabled:opacity-50"
                 >
-                  Batal
+                  Hapus Peserta
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSavePeriode}
-                  disabled={saving}
-                  className="px-4 py-2 text-xs font-bold uppercase tracking-wider bg-[#043666] hover:bg-[#04315C] text-[#E9C170] rounded-md disabled:opacity-50"
-                >
-                  {saving ? 'Menyimpan...' : 'Simpan Periode'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditItem(null)}
+                    disabled={saving}
+                    className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider border border-slate-300 rounded-md text-slate-700 hover:bg-slate-100"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSavePeriode}
+                    disabled={saving}
+                    className="px-3.5 py-2 text-xs font-bold uppercase tracking-wider bg-[#043666] hover:bg-[#04315C] text-[#E9C170] rounded-md disabled:opacity-50"
+                  >
+                    {saving ? 'Menyimpan...' : 'Simpan Periode'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1718,7 +1768,7 @@ export function RekapTab() {
                         type="text"
                         value={ttdJabatan}
                         onChange={(e) => updateTtdConfig('jabatan', e.target.value)}
-                        placeholder="Pembimbing / Pejabat Berwenang,"
+                        placeholder="Ketua Tim Kepegawaian dan Kerja Sama"
                         className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-900 focus:outline-none focus:border-[#043666]"
                       />
                     </div>
@@ -1742,7 +1792,7 @@ export function RekapTab() {
                         type="text"
                         value={ttdNip}
                         onChange={(e) => updateTtdConfig('nip', e.target.value)}
-                        placeholder="NIP. ... / Kanwil Ditjen Imigrasi Sulsel"
+                        placeholder="Opsional (Kosongkan jika tanpa NIP)"
                         className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-900 focus:outline-none focus:border-[#043666]"
                       />
                     </div>
@@ -1750,13 +1800,23 @@ export function RekapTab() {
                 </div>
 
                 <div className="px-5 sm:px-6 py-3.5 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setProfileItem(null)}
-                    className="px-4 py-2 text-xs font-bold uppercase tracking-wider border border-slate-300 bg-white rounded-md text-slate-700 hover:bg-slate-100"
-                  >
-                    Tutup
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setProfileItem(null)}
+                      className="px-4 py-2 text-xs font-bold uppercase tracking-wider border border-slate-300 bg-white rounded-md text-slate-700 hover:bg-slate-100"
+                    >
+                      Tutup
+                    </button>
+                    <button
+                      type="button"
+                      disabled={processingAuto}
+                      onClick={() => handleDeleteParticipant(profileItem.nama, profileItem.universitas)}
+                      className="px-3 py-2 text-xs font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-700 hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      Hapus Peserta
+                    </button>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     <a
                       href={`/api/admin/export?tipe=individu&nama=${encodeURIComponent(profileItem.nama)}&univ=${encodeURIComponent(profileItem.universitas)}`}

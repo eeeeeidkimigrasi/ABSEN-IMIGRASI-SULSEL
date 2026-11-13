@@ -1,98 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { syncAbsenRow, appendIzin } from '@/lib/sheets';
-import { getDayName } from '@/lib/waktu';
+import { cleanupInactiveParticipants } from '@/lib/auto-clean';
 
 export async function GET(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  const auth = req.headers.get('authorization');
-  if (!cronSecret || !auth || auth !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  const authHeader = req.headers.get('authorization');
+  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // 1. Retry sync ke Google Sheets
-  const { data: pending, error: selectError } = await supabase
-    .from('absensi')
-    .select('nama, universitas, tanggal, jam_masuk, jam_keluar, keterangan')
-    .eq('synced_to_sheets', false)
-    .order('waktu_kirim', { ascending: true })
-    .limit(100);
-
-  if (selectError) {
-    console.error('Cron select error:', selectError);
-    return NextResponse.json({ ok: false, error: 'DB select failed' }, { status: 500 });
-  }
-
-  let synced = 0;
-  if (pending) {
-    for (const row of pending) {
-      try {
-        const hari = getDayName(row.tanggal);
-        await syncAbsenRow({
-          nama: row.nama,
-          universitas: row.universitas,
-          tanggal: row.tanggal,
-          hari,
-          jam_masuk: String(row.jam_masuk).slice(0, 5),
-          jam_keluar: row.jam_keluar ? String(row.jam_keluar).slice(0, 5) : '',
-          keterangan: row.keterangan,
-        });
-        await supabase
-          .from('absensi')
-          .update({ synced_to_sheets: true })
-          .eq('nama_key', row.nama.toLowerCase().trim())
-          .eq('univ_key', row.universitas.toLowerCase().trim())
-          .eq('tanggal', row.tanggal);
-        synced++;
-      } catch (e) {
-        console.error('Retry sync failed for', row, e);
-      }
-    }
-  }
-  // 2. Retry sync ke Google Sheets (izin)
-  const { data: pendingIzin, error: selectIzinError } = await supabase
-    .from('izin')
-    .select('nama, universitas, tanggal, jenis, keterangan, link_surat')
-    .eq('synced_to_sheets', false)
-    .order('waktu_kirim', { ascending: true })
-    .limit(100);
-
-  if (selectIzinError) {
-    console.error('Cron select izin error:', selectIzinError);
-  } else if (pendingIzin) {
-    for (const row of pendingIzin) {
-      try {
-        const hari = getDayName(row.tanggal);
-        await appendIzin({
-          nama: row.nama,
-          universitas: row.universitas,
-          tanggal: row.tanggal,
-          hari,
-          jenis: row.jenis,
-          keterangan: row.keterangan,
-          link_surat: row.link_surat,
-        });
-        await supabase
-          .from('izin')
-          .update({ synced_to_sheets: true })
-          .eq('nama_key', row.nama.toLowerCase().trim())
-          .eq('univ_key', row.universitas.toLowerCase().trim())
-          .eq('tanggal', row.tanggal);
-        synced++;
-      } catch (e) {
-        console.error('Retry sync izin failed for', row, e);
-      }
-    }
-  }
-
-
-
-  // 2. Keepalive Supabase (query ringan)
   try {
-    await supabase.from('absensi').select('nama_key').limit(1);
-  } catch (e) {
-    console.error('Keepalive failed:', e);
-  }
+    // 1. Jalankan pembersihan otomatis peserta inaktif > 6 bulan & log > 90 hari
+    const cleanResult = await cleanupInactiveParticipants();
 
-  return NextResponse.json({ ok: true, synced });
+    // 2. Ping hitung sisa baris absensi (menjaga Supabase tetap aktif)
+    const { count } = await supabase
+      .from('absensi')
+      .select('*', { count: 'exact', head: true });
+
+    return NextResponse.json({
+      ok: true,
+      status: 'alive',
+      total_absensi: count || 0,
+      auto_deleted_participants: cleanResult.purgedCount,
+      cutoff_date_6_months: cleanResult.cutoffDate,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err?.message }, { status: 500 });
+  }
 }

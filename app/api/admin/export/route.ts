@@ -258,11 +258,11 @@ export async function GET(req: NextRequest) {
       );
 
       filename = `log-admin-${todayStr}.csv`;
-      csvContent = '\uFEFFWAKTU,AKSI,TABEL,SHEETS_OK,SEBELUM,SESUDAH\n';
+      csvContent = '\uFEFFWAKTU,AKSI,TABEL,SEBELUM,SESUDAH\n';
       data.forEach((r) => {
         const sebelum = r.sebelum ? JSON.stringify(r.sebelum) : '';
         const sesudah = r.sesudah ? JSON.stringify(r.sesudah) : '';
-        csvContent += `${escapeCSV(r.waktu)},${escapeCSV(r.aksi)},${escapeCSV(r.tabel)},${escapeCSV(r.sheets_ok)},${escapeCSV(sebelum)},${escapeCSV(sesudah)}\n`;
+        csvContent += `${escapeCSV(r.waktu)},${escapeCSV(r.aksi)},${escapeCSV(r.tabel)},${escapeCSV(sebelum)},${escapeCSV(sesudah)}\n`;
       });
     } else {
       return new Response('Tipe tidak valid', { status: 400 });

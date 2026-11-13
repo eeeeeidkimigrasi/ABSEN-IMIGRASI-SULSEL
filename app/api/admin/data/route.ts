@@ -1,3 +1,4 @@
+import { cleanupInactiveParticipants } from '@/lib/auto-clean';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getTodayDate, getDayName } from '@/lib/waktu';
@@ -150,6 +151,7 @@ async function handleLog() {
 }
 
 async function handleSummary() {
+  cleanupInactiveParticipants().catch(() => {});
   const tanggal = getTodayDate();
   const hari = getDayName(tanggal);
   const customHolidays = await getCustomHolidaysMap();
@@ -197,9 +199,18 @@ async function handleSummary() {
     ? []
     : uniqueAktif.filter((a) => !hadirKeys.has(`${a.nama_key}|${a.univ_key}`) && !izinKeys.has(`${a.nama_key}|${a.univ_key}`));
 
+  // Auto-maintenance: bersihkan log perubahan biasa yang lebih tua dari 90 hari (kecuali hari_libur)
+  const ninetyDaysAgoIso = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+  await supabase
+    .from('admin_log')
+    .delete()
+    .neq('tabel', 'hari_libur')
+    .lt('waktu', ninetyDaysAgoIso);
+
   const { data: logsData } = await supabase
     .from('admin_log')
     .select('id, waktu, aksi, tabel, sebelum, sesudah, sheets_ok')
+    .neq('tabel', 'hari_libur')
     .order('waktu', { ascending: false })
     .limit(50);
 
@@ -222,27 +233,53 @@ async function handleRekap(params: URLSearchParams) {
   const jamSekarang = getCurrentTimeWita();
   const thresholdStr = getThresholdDateWita(ACTIVE_DAYS);
 
+  // Optimasi jangka panjang: jika hanya peserta aktif (14 hari), ambil daftar nama_key aktif dari absensi & izin
+  let activeNamaKeys: string[] | null = null;
+  if (onlyActive) {
+    const [recentAbs, recentIz] = await Promise.all([
+      fetchAll((from, to) => {
+        let rq = supabase.from('absensi').select('nama_key').gte('tanggal', thresholdStr);
+        if (search) rq = rq.ilike('nama', `%${search}%`);
+        return rq.order('nama_key', { ascending: true }).range(from, to);
+      }),
+      fetchAll((from, to) => {
+        let iq = supabase.from('izin').select('nama_key').gte('tanggal', thresholdStr);
+        if (search) iq = iq.ilike('nama', `%${search}%`);
+        return iq.order('nama_key', { ascending: true }).range(from, to);
+      }),
+    ]);
+    activeNamaKeys = Array.from(
+      new Set([...recentAbs, ...recentIz].map((r: any) => r.nama_key).filter(Boolean))
+    );
+    if (activeNamaKeys.length === 0) {
+      return NextResponse.json([]);
+    }
+  }
+
   const [data, izinData, customHolidays] = await Promise.all([
-    fetchAll<any>((from, to) => {
+    fetchAll((from, to) => {
       let q = supabase
         .from('absensi')
         .select('nama, universitas, tanggal, jam_keluar, keterangan, nama_key, univ_key, tgl_mulai, tgl_selesai');
       if (search) q = q.ilike('nama', `%${search}%`);
+      if (activeNamaKeys && activeNamaKeys.length <= 200) q = q.in('nama_key', activeNamaKeys);
       return q
         .order('tanggal', { ascending: true })
         .order('nama_key', { ascending: true })
         .order('univ_key', { ascending: true })
         .range(from, to);
     }),
-    fetchAll<any>((from, to) =>
-      supabase
+    fetchAll((from, to) => {
+      let iq = supabase
         .from('izin')
-        .select('nama_key, univ_key, tanggal, tgl_mulai, tgl_selesai')
+        .select('nama_key, univ_key, tanggal, tgl_mulai, tgl_selesai');
+      if (activeNamaKeys && activeNamaKeys.length <= 200) iq = iq.in('nama_key', activeNamaKeys);
+      return iq
         .order('tanggal', { ascending: true })
         .order('nama_key', { ascending: true })
         .order('univ_key', { ascending: true })
-        .range(from, to)
-    ),
+        .range(from, to);
+    }),
     getCustomHolidaysMap(),
   ]);
 
@@ -588,6 +625,53 @@ async function handleIzin(params: URLSearchParams) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+
+    // 0. Hapus Seluruh Data Peserta (Untuk membersihkan data tes / peserta batal magang)
+    if (body.action === 'delete_participant') {
+      const nama = (body.nama || '').trim();
+      const universitas = (body.universitas || '').trim();
+      const nama_key = nama.toLowerCase();
+      const univ_key = universitas.toLowerCase();
+
+      if (!nama_key || !univ_key) {
+        return NextResponse.json({ ok: false, error: 'Nama dan universitas wajib diisi.' }, { status: 400 });
+      }
+
+      const [{ data: delAbs, error: errDelAbs }, { data: delIz, error: errDelIz }] = await Promise.all([
+        supabase.from('absensi').delete().eq('nama_key', nama_key).eq('univ_key', univ_key).select('tanggal'),
+        supabase.from('izin').delete().eq('nama_key', nama_key).eq('univ_key', univ_key).select('tanggal'),
+      ]);
+
+      if (errDelAbs || errDelIz) {
+        return NextResponse.json(
+          { ok: false, error: errDelAbs?.message || errDelIz?.message || 'Gagal menghapus data peserta.' },
+          { status: 500 }
+        );
+      }
+
+      try {
+        await supabase.from('peserta').delete().eq('nama_key', nama_key).eq('univ_key', univ_key);
+      } catch {}
+
+      await supabase.from('admin_log').insert({
+        aksi: 'hapus_peserta',
+        tabel: 'absensi',
+        sebelum: {
+          nama,
+          universitas,
+          absensi_dihapus: delAbs?.length || 0,
+          izin_dihapus: delIz?.length || 0,
+        },
+        sesudah: null,
+        sheets_ok: true,
+      });
+
+      return NextResponse.json({
+        ok: true,
+        deleted_absensi: delAbs?.length || 0,
+        deleted_izin: delIz?.length || 0,
+      });
+    }
 
     // 1. Tambah Hari Libur Nasional / Cuti Bersama (Bisa 1 hari atau rentang tanggal)
     if (body.action === 'add_holiday') {

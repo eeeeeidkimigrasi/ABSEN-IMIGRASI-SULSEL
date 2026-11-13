@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 
@@ -22,81 +22,90 @@ export function LogTab() {
   }, [fetchLogs]);
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <p className="text-sm text-gray-500">50 Perubahan Terakhir pada Data Admin</p>
+    <div className="space-y-6">
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#043666]">
+            Riwayat Aktivitas Administrator
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Menampilkan 50 perubahan data terakhir pada sistem database (otomatis dibersihkan setelah 90 hari).
+          </p>
+        </div>
         <a
           href="/api/admin/export?tipe=log"
-          className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
+          className="px-4 py-2 bg-[#043666] hover:bg-[#04315C] text-[#E9C170] font-bold text-xs uppercase tracking-wider rounded-md shadow-sm transition-colors"
         >
           Ekspor CSV Log
         </a>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-x-auto">
-        <table className="w-full text-sm text-left">
-          <thead className="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
-            <tr>
-              <th className="px-4 py-3">Waktu</th>
-              <th className="px-4 py-3">Aksi</th>
-              <th className="px-4 py-3">Tabel</th>
-              <th className="px-4 py-3">Sheets OK</th>
-              <th className="px-4 py-3">Sebelum</th>
-              <th className="px-4 py-3">Sesudah</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {loading ? (
+      <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+        <div className="bg-[#043666] px-5 py-3.5 border-b-2 border-[#E9C170] flex items-center justify-between">
+          <h2 className="text-xs font-extrabold uppercase tracking-wider text-white">
+            Log Perubahan Data Presensi & Izin
+          </h2>
+          <span className="px-2.5 py-0.5 text-[11px] font-extrabold rounded bg-[#E9C170] text-[#04315C]">
+            {logs.length} Aktivitas
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-slate-50 text-slate-700 uppercase text-[11px] font-extrabold tracking-wider border-b border-slate-200">
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
-                  Memuat...
-                </td>
+                <th className="px-5 py-3.5">Waktu (WITA)</th>
+                <th className="px-5 py-3.5">Aksi</th>
+                <th className="px-5 py-3.5">Tabel</th>
+                <th className="px-5 py-3.5">Data Sebelum</th>
+                <th className="px-5 py-3.5">Data Sesudah</th>
               </tr>
-            ) : (
-              logs.map((log) => (
-                <tr key={log.id} className="hover:bg-gray-50 align-top">
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
-                    {new Date(log.waktu).toLocaleString('id-ID')}
-                  </td>
-                  <td className="px-4 py-3 font-semibold uppercase text-xs">
-                    <span
-                      className={`px-2 py-1 rounded ${
-                        log.aksi === 'tambah'
-                          ? 'bg-green-100 text-green-800'
-                          : log.aksi === 'edit'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {log.aksi}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 font-medium">{log.tabel}</td>
-                  <td className="px-4 py-3">
-                    {log.sheets_ok ? (
-                      <span className="text-green-600 font-medium">Ya</span>
-                    ) : (
-                      <span className="text-red-600 font-medium">Tidak</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-600 max-w-xs truncate">
-                    {log.sebelum ? JSON.stringify(log.sebelum) : '-'}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-600 max-w-xs truncate">
-                    {log.sesudah ? JSON.stringify(log.sesudah) : '-'}
+            </thead>
+            <tbody className="divide-y divide-slate-200 text-slate-800">
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-10 text-center text-xs font-bold uppercase tracking-widest text-[#043666]">
+                    Memuat Log Aktivitas...
                   </td>
                 </tr>
-              ))
-            )}
-            {!loading && logs.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
-                  Belum ada log perubahan
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              ) : (
+                logs.map((log) => (
+                  <tr key={log.id} className="hover:bg-slate-50/80 align-top transition-colors">
+                    <td className="px-5 py-3.5 whitespace-nowrap text-xs font-medium text-slate-600">
+                      {new Date(log.waktu).toLocaleString('id-ID')}
+                    </td>
+                    <td className="px-5 py-3.5 font-bold uppercase text-xs whitespace-nowrap">
+                      <span
+                        className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold border ${
+                          String(log.aksi).includes('tambah') || String(log.aksi).includes('backfill')
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : String(log.aksi).includes('edit')
+                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                            : 'bg-red-50 text-red-800 border-red-200'
+                        }`}
+                      >
+                        {log.aksi}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 font-bold text-slate-900 uppercase text-xs">{log.tabel}</td>
+                    <td className="px-5 py-3.5 font-mono text-xs text-slate-600 max-w-xs break-words">
+                      {log.sebelum ? JSON.stringify(log.sebelum) : '-'}
+                    </td>
+                    <td className="px-5 py-3.5 font-mono text-xs text-slate-600 max-w-xs break-words">
+                      {log.sesudah ? JSON.stringify(log.sesudah) : '-'}
+                    </td>
+                  </tr>
+                ))
+              )}
+              {!loading && logs.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-5 py-10 text-center text-xs font-medium text-slate-400">
+                    Belum ada riwayat perubahan data.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
