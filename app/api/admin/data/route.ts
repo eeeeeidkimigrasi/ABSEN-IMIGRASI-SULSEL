@@ -179,16 +179,25 @@ async function handleSummary() {
 
   const thresholdStr = getThresholdDateWita(ACTIVE_DAYS);
 
-  const aktif = await fetchAll<any>((from, to) =>
-    supabase
-      .from('absensi')
-      .select('nama, universitas, nama_key, univ_key')
-      .gte('tanggal', thresholdStr)
-      .order('tanggal', { ascending: false })
-      .order('nama_key', { ascending: true })
-      .order('univ_key', { ascending: true })
-      .range(from, to)
-  );
+  const [aktifAbs, aktifIz] = await Promise.all([
+    fetchAll((from, to) =>
+      supabase
+        .from('absensi')
+        .select('nama, universitas, nama_key, univ_key')
+        .gte('tanggal', thresholdStr)
+        .order('tanggal', { ascending: false })
+        .range(from, to)
+    ),
+    fetchAll((from, to) =>
+      supabase
+        .from('izin')
+        .select('nama, universitas, nama_key, univ_key')
+        .gte('tanggal', thresholdStr)
+        .order('tanggal', { ascending: false })
+        .range(from, to)
+    ),
+  ]);
+  const aktif = [...(aktifAbs as any[]), ...(aktifIz as any[])];
 
   const uniqueAktif = Array.from(new Map(aktif.map((a) => [`${a.nama_key}|${a.univ_key}`, a])).values());
 
@@ -272,7 +281,7 @@ async function handleRekap(params: URLSearchParams) {
     fetchAll((from, to) => {
       let iq = supabase
         .from('izin')
-        .select('nama_key, univ_key, tanggal, tgl_mulai, tgl_selesai');
+        .select('nama, universitas, nama_key, univ_key, tanggal, tgl_mulai, tgl_selesai');
       if (activeNamaKeys && activeNamaKeys.length <= 200) iq = iq.in('nama_key', activeNamaKeys);
       return iq
         .order('tanggal', { ascending: true })
