@@ -103,7 +103,32 @@ export function RekapTab() {
         if (parsed.nip !== undefined) setTtdNip(parsed.nip);
       }
     } catch {}
+
+    fetch('/api/admin/data?tipe=ttd')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && (d.nama || d.nip || d.jabatan)) {
+          const jab = d.jabatan || 'Ketua Tim Kepegawaian dan Kerja Sama';
+          const nm = d.nama || '';
+          const np = d.nip || '';
+          setTtdJabatan(jab);
+          setTtdNama(nm);
+          setTtdNip(np);
+          try {
+            localStorage.setItem('rekap_ttd_pejabat_v2', JSON.stringify({ jabatan: jab, nama: nm, nip: np }));
+          } catch {}
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  const saveTtdToServer = (next: { jabatan: string; nama: string; nip: string }) => {
+    fetch('/api/admin/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'save_ttd', ...next }),
+    }).catch(() => {});
+  };
 
   const updateTtdConfig = (field: 'jabatan' | 'nama' | 'nip', val: string) => {
     const next = {
@@ -117,6 +142,7 @@ export function RekapTab() {
     try {
       localStorage.setItem('rekap_ttd_pejabat_v2', JSON.stringify(next));
     } catch {}
+    saveTtdToServer(next);
   };
 
   const loadRekap = () => {

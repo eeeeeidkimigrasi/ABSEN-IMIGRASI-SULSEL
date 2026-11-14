@@ -84,7 +84,23 @@ export async function GET(req: NextRequest) {
       return await handleRiwayat(searchParams);
     } else if (tipe === 'izin') {
       return await handleIzin(searchParams);
-    } else if (tipe === 'log') {
+    } else if (tipe === 'ttd') {
+    const { data: ttdRows } = await supabase
+      .from('admin_log')
+      .select('id, sebelum, sesudah')
+      .eq('aksi', 'edit')
+      .eq('tabel', 'absensi')
+      .order('id', { ascending: false })
+      .limit(50);
+    const found = (ttdRows || []).find((r: any) => r.sesudah && r.sesudah.tipe_log === 'ttd_config');
+    return NextResponse.json(
+      found?.sesudah || {
+        jabatan: 'Ketua Tim Kepegawaian dan Kerja Sama',
+        nama: '',
+        nip: '',
+      }
+    );
+  } else if (tipe === 'log') {
       return await handleLog();
     } else if (tipe === 'libur') {
       return await handleLibur();
@@ -984,6 +1000,44 @@ export async function POST(req: NextRequest) {
       });
 
       return NextResponse.json({ ok: true, deleted: deletedRows?.length || 0 });
+    }
+
+    // 5b. Simpan Konfigurasi Penandatangan PDF (TTD Pejabat) secara Global
+    if (body.action === 'save_ttd') {
+      const jabatan = String(body.jabatan ?? 'Ketua Tim Kepegawaian dan Kerja Sama').trim().slice(0, 120);
+      const nama_pejabat = String(body.nama ?? '').trim().slice(0, 120);
+      const nip = String(body.nip ?? '').trim().slice(0, 120);
+
+      // Hapus baris konfigurasi TTD lama agar tidak menumpuk di admin_log
+      const { data: oldTtdLogs } = await supabase
+        .from('admin_log')
+        .select('id, sebelum')
+        .eq('aksi', 'edit')
+        .eq('tabel', 'absensi')
+        .order('id', { ascending: false })
+        .limit(50);
+
+      const oldIds = (oldTtdLogs || [])
+        .filter((r: any) => r.sebelum && r.sebelum.tipe_log === 'ttd_config')
+        .map((r: any) => r.id);
+
+      if (oldIds.length > 0) {
+        await supabase.from('admin_log').delete().in('id', oldIds);
+      }
+
+      const { error: ttdErr } = await supabase.from('admin_log').insert({
+        aksi: 'edit',
+        tabel: 'absensi',
+        sebelum: { tipe_log: 'ttd_config' },
+        sesudah: { tipe_log: 'ttd_config', jabatan, nama: nama_pejabat, nip },
+        sheets_ok: true,
+      });
+
+      if (ttdErr) {
+        return NextResponse.json({ ok: false, error: ttdErr.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ ok: true, ttd: { jabatan, nama: nama_pejabat, nip } });
     }
 
     // 6. Simpan Periode Mulai & Selesai Magang

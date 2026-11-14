@@ -493,9 +493,10 @@ export default function AbsenPage() {
       </div>
       <div class="ttd-box" style="text-align:left;width:210px;">
         <div contenteditable="true" style="outline:none;">Mengetahui</div>
-        <div contenteditable="true" style="outline:none;line-height:1.35;">Ketua Tim Kepegawaian<br/>dan Kerja Sama</div>
+        <div contenteditable="true" style="outline:none;line-height:1.35;">${esc(item.ttd?.jabatan || 'Ketua Tim Kepegawaian dan Kerja Sama')}</div>
         <div class="ttd-space"></div>
-        <div contenteditable="true" style="font-weight:700;outline:none;">( ................................................ )</div>
+        <div contenteditable="true" style="font-weight:700;outline:none;">${esc(item.ttd?.nama?.trim() ? item.ttd.nama.trim() : '( ................................................ )')}</div>
+        ${item.ttd?.nip?.trim() ? `<div contenteditable="true" style="color:#475569;font-size:10px;margin-top:2px;outline:none;">${esc(item.ttd.nip.trim())}</div>` : ''}
       </div>
     </div>
   </div>

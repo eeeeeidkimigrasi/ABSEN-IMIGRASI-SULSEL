@@ -275,6 +275,20 @@ export async function GET(req: NextRequest) {
       };
     });
 
+    const { data: ttdRows } = await supabase
+      .from('admin_log')
+      .select('id, sesudah')
+      .eq('aksi', 'edit')
+      .eq('tabel', 'absensi')
+      .order('id', { ascending: false })
+      .limit(50);
+    const foundTtd = (ttdRows || []).find((r: any) => r.sesudah && r.sesudah.tipe_log === 'ttd_config');
+    const ttd = foundTtd?.sesudah || {
+      jabatan: 'Ketua Tim Kepegawaian dan Kerja Sama',
+      nama: '',
+      nip: '',
+    };
+
     return NextResponse.json({
       nama: displayNama,
       universitas: displayUniv,
@@ -286,6 +300,7 @@ export async function GET(req: NextRequest) {
       spCount,
       terakhir: terakhirHadir,
       calendar,
+      ttd,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Gagal memuat rekap peserta.' }, { status: 500 });
