@@ -65,7 +65,7 @@ export async function cleanupInactiveParticipants() {
     } catch {}
 
     await supabase.from('admin_log').insert({
-      aksi: 'auto_delete_6bln',
+      aksi: 'hapus',
       tabel: 'absensi',
       sebelum: {
         nama: exp.nama,
@@ -85,7 +85,7 @@ export async function cleanupInactiveParticipants() {
   await supabase
     .from('admin_log')
     .delete()
-    .neq('tabel', 'hari_libur')
+    .not('sesudah', 'is', null)
     .lt('waktu', ninetyDaysAgoIso);
 
   return { cutoffDate, purgedCount };

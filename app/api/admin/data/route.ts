@@ -46,16 +46,23 @@ function generateDateRange(startStr: string, endStr: string): string[] {
 async function getCustomHolidaysMap() {
   const { data } = await supabase
     .from('admin_log')
-    .select('id, aksi, sesudah')
-    .eq('tabel', 'hari_libur')
+    .select('id, aksi, tabel, sebelum, sesudah')
     .order('id', { ascending: true });
 
   const map = new Map<string, string>();
   for (const row of data || []) {
     const info = row.sesudah as any;
-    if ((row.aksi === 'tambah' || row.aksi === 'tambah_libur') && info?.tanggal) {
+    const seb = row.sebelum as any;
+    const isHoliday =
+      row.tabel === 'hari_libur' ||
+      seb?.tipe_log === 'hari_libur' ||
+      (info && typeof info === 'object' && info.tanggal && !info.nama);
+
+    if (!isHoliday || !info?.tanggal) continue;
+
+    if (row.aksi === 'tambah' || row.aksi === 'tambah_libur') {
       map.set(String(info.tanggal), String(info.keterangan || 'Hari Libur Nasional'));
-    } else if ((row.aksi === 'hapus' || row.aksi === 'hapus_libur') && info?.tanggal) {
+    } else if (row.aksi === 'hapus' || row.aksi === 'hapus_libur') {
       map.delete(String(info.tanggal));
     }
   }
@@ -698,7 +705,7 @@ export async function POST(req: NextRequest) {
 
       const logsToInsert = dates.map((d) => ({
         aksi: 'tambah',
-        tabel: 'hari_libur',
+        tabel: 'absensi',
         sebelum: null,
         sesudah: { tanggal: d, keterangan },
         sheets_ok: true,
@@ -721,7 +728,7 @@ export async function POST(req: NextRequest) {
 
       const { error } = await supabase.from('admin_log').insert({
         aksi: 'hapus',
-        tabel: 'hari_libur',
+        tabel: 'absensi',
         sebelum: { tanggal },
         sesudah: { tanggal },
         sheets_ok: true,
