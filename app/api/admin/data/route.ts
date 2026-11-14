@@ -53,9 +53,9 @@ async function getCustomHolidaysMap() {
   const map = new Map<string, string>();
   for (const row of data || []) {
     const info = row.sesudah as any;
-    if (row.aksi === 'tambah_libur' && info?.tanggal) {
+    if ((row.aksi === 'tambah' || row.aksi === 'tambah_libur') && info?.tanggal) {
       map.set(String(info.tanggal), String(info.keterangan || 'Hari Libur Nasional'));
-    } else if (row.aksi === 'hapus_libur' && info?.tanggal) {
+    } else if ((row.aksi === 'hapus' || row.aksi === 'hapus_libur') && info?.tanggal) {
       map.delete(String(info.tanggal));
     }
   }
@@ -662,7 +662,7 @@ export async function POST(req: NextRequest) {
       } catch {}
 
       await supabase.from('admin_log').insert({
-        aksi: 'hapus_peserta',
+        aksi: 'hapus',
         tabel: 'absensi',
         sebelum: {
           nama,
@@ -697,7 +697,7 @@ export async function POST(req: NextRequest) {
       }
 
       const logsToInsert = dates.map((d) => ({
-        aksi: 'tambah_libur',
+        aksi: 'tambah',
         tabel: 'hari_libur',
         sebelum: null,
         sesudah: { tanggal: d, keterangan },
@@ -720,7 +720,7 @@ export async function POST(req: NextRequest) {
       }
 
       const { error } = await supabase.from('admin_log').insert({
-        aksi: 'hapus_libur',
+        aksi: 'hapus',
         tabel: 'hari_libur',
         sebelum: { tanggal },
         sesudah: { tanggal },
@@ -969,7 +969,7 @@ export async function POST(req: NextRequest) {
       }
 
       await supabase.from('admin_log').insert({
-        aksi: 'undo_backfill',
+        aksi: 'hapus',
         tabel: 'absensi',
         sebelum: { nama, universitas, dihapus: deletedRows?.length || 0 },
         sesudah: null,

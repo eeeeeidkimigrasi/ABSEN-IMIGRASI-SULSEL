@@ -57,9 +57,9 @@ async function getCustomHolidaysMap() {
   const map = new Map();
   for (const row of data || []) {
     const info = row.sesudah as any;
-    if (row.aksi === 'tambah_libur' && info?.tanggal) {
+    if ((row.aksi === 'tambah' || row.aksi === 'tambah_libur') && info?.tanggal) {
       map.set(String(info.tanggal), String(info.keterangan || 'Hari Libur Nasional'));
-    } else if (row.aksi === 'hapus_libur' && info?.tanggal) {
+    } else if ((row.aksi === 'hapus' || row.aksi === 'hapus_libur') && info?.tanggal) {
       map.delete(String(info.tanggal));
     }
   }
