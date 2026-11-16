@@ -17,6 +17,11 @@ function getThresholdDateWita(daysAgo: number): string {
   return wita.toISOString().slice(0, 10);
 }
 
+function isFridayWfh(dateStr: string): boolean {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 5;
+}
+
 function isWeekendOrFriday(dateStr: string): boolean {
   const [y, m, d] = dateStr.split('-').map(Number);
   const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
@@ -204,8 +209,10 @@ export async function GET(req: NextRequest) {
           csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},IZIN (${escapeCSV(iz.jenis)}),-,-,${escapeCSV(iz.keterangan)}\n`;
         } else if (liburNas) {
           csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},LIBUR NASIONAL,-,-,${escapeCSV(liburNas)}\n`;
+        } else if (isFridayWfh(d)) {
+          csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},HADIR,WFH,WFH,WFH (Work From Home)\n`;
         } else if (libur) {
-          csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},LIBUR,-,-,Libur (Jumat / Akhir Pekan)\n`;
+          csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},LIBUR,-,-,Libur Akhir Pekan\n`;
         } else if (d === todayStr && jamSekarang < BATAS_JAM_PULANG) {
           csvContent += `${d},${hari},${escapeCSV(displayNama)},${escapeCSV(displayUniv)},BELUM ABSEN,-,-,Belum Melakukan Presensi Hari Ini\n`;
         } else {

@@ -24,6 +24,11 @@ function getCurrentTimeWita(): string {
   return wita.toISOString().slice(11, 16);
 }
 
+function isFridayWfh(dateStr: string): boolean {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 5;
+}
+
 function isWeekendOrFriday(dateStr: string): boolean {
   const [y, m, d] = dateStr.split('-').map(Number);
   const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
@@ -240,6 +245,18 @@ export async function GET(req: NextRequest) {
         };
       }
 
+      if (isFridayWfh(d)) {
+        return {
+          tanggal: d,
+          hari,
+          status: 'HADIR',
+          jam_masuk: 'WFH',
+          jam_keluar: 'WFH',
+          tidak_absen_pulang: false,
+          keterangan: 'WFH (Work From Home)',
+        };
+      }
+
       if (liburRutin) {
         return {
           tanggal: d,
@@ -248,7 +265,7 @@ export async function GET(req: NextRequest) {
           jam_masuk: '-',
           jam_keluar: '-',
           tidak_absen_pulang: false,
-          keterangan: 'Libur (Jumat / Akhir Pekan)',
+          keterangan: 'Libur Akhir Pekan',
         };
       }
 
@@ -294,7 +311,7 @@ export async function GET(req: NextRequest) {
       universitas: displayUniv,
       tgl_mulai: startStr,
       tgl_selesai: tgl_selesai || null,
-      count: absenMap.size,
+      count: calendar.filter((c: any) => c.status === 'HADIR').length,
       izinCount: izinMap.size,
       alphaCount,
       spCount,

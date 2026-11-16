@@ -58,7 +58,7 @@ export function HariIniTab() {
             </p>
           </div>
           <span className="px-3 py-1 text-xs font-extrabold uppercase tracking-wider rounded bg-[#E9C170] text-[#04315C]">
-            HARI LIBUR
+            {data.hari === 'Jumat' ? 'JADWAL WFH' : 'HARI LIBUR'}
           </span>
         </div>
       )}
@@ -82,7 +82,7 @@ export function HariIniTab() {
             {data.is_libur ? 'Status Hari Ini' : 'Belum Absen'}
           </p>
           <p className="text-2xl font-black text-slate-700 mt-1">
-            {data.is_libur ? 'LIBUR' : data.belum.length}
+            {data.is_libur ? (data.hari === 'Jumat' ? 'WFH' : 'LIBUR') : data.belum.length}
           </p>
         </div>
       </div>

@@ -19,6 +19,11 @@ function getThresholdDateWita(daysAgo: number): string {
 }
 
 // Jumat (5), Sabtu (6), Minggu (0) adalah hari libur rutin
+function isFridayWfh(dateStr: string): boolean {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 5;
+}
+
 function isWeekendOrFriday(dateStr: string): boolean {
   const [y, m, d] = dateStr.split('-').map(Number);
   const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
@@ -182,8 +187,10 @@ async function handleSummary() {
   const isLibur = Boolean(liburNasional || liburRutin);
   const keteranganLibur = liburNasional
     ? `Libur Nasional: ${liburNasional}`
+    : isFridayWfh(tanggal)
+    ? 'Jadwal WFH (Jumat) — Otomatis Tercatat Hadir'
     : liburRutin
-    ? `Hari Libur (${hari})`
+    ? `Hari Libur Akhir Pekan (${hari})`
     : null;
 
   const { data: hadir, error: errHadir } = await supabase
@@ -398,13 +405,23 @@ async function handleRekap(params: URLSearchParams) {
     if (startRange && rawEnd >= startRange) {
       const allDates = generateDateRange(startRange, rawEnd);
       let alpha = 0;
+      let wfhBonus = 0;
       for (const d of allDates) {
-        if (isWeekendOrFriday(d) || customHolidays.has(d)) continue;
+        if (customHolidays.has(d)) continue;
+        if (isFridayWfh(d)) {
+          if (!hadirDateSet.has(`${entry.key}|${d}`) && !izinDateSet.has(`${entry.key}|${d}`)) {
+            wfhBonus++;
+            if (!entry.terakhir || d > entry.terakhir) entry.terakhir = d;
+          }
+          continue;
+        }
+        if (isWeekendOrFriday(d)) continue;
         if (d === todayStr && jamSekarang < BATAS_JAM_PULANG) continue;
         if (!hadirDateSet.has(`${entry.key}|${d}`) && !izinDateSet.has(`${entry.key}|${d}`)) {
           alpha++;
         }
       }
+      entry.count += wfhBonus;
       entry.alphaCount = alpha;
     }
   }
@@ -561,6 +578,19 @@ async function handleIndividu(params: URLSearchParams) {
       };
     }
 
+    if (isFridayWfh(d)) {
+      return {
+        tanggal: d,
+        hari,
+        status: 'HADIR',
+        jam_masuk: 'WFH',
+        jam_keluar: 'WFH',
+        tidak_absen_pulang: false,
+        is_auto: false,
+        keterangan: 'WFH (Work From Home)',
+      };
+    }
+
     if (liburRutin) {
       return {
         tanggal: d,
@@ -569,7 +599,7 @@ async function handleIndividu(params: URLSearchParams) {
         jam_masuk: '-',
         jam_keluar: '-',
         tidak_absen_pulang: false,
-        keterangan: 'Libur (Jumat / Akhir Pekan)',
+        keterangan: 'Libur Akhir Pekan',
       };
     }
 
